@@ -12,10 +12,15 @@ const server = spawn(process.execPath,
 const stop = code => { server.kill(); process.exit(code); };
 process.on('SIGINT', () => stop(130));
 
-setTimeout(() => {
-  const test = spawn(process.execPath, [path.join(__dirname, 'ui.test.js')], {
+const SUITES = ['ui.test.js', 'share.test.js'];
+
+function runSuite(i, failed) {
+  if (i === SUITES.length) return stop(failed ? 1 : 0);
+  const test = spawn(process.execPath, [path.join(__dirname, SUITES[i])], {
     stdio: 'inherit',
     env: Object.assign({}, process.env, { BASE_URL: `http://127.0.0.1:${PORT}/index.html` })
   });
-  test.on('exit', stop);
-}, 1200);
+  test.on('exit', code => runSuite(i + 1, failed || code !== 0));
+}
+
+setTimeout(() => runSuite(0, false), 1200);

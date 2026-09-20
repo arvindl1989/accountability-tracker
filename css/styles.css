@@ -371,3 +371,22 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
 .mini label{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint)}
 .mini input{width:104px}
 @media (max-width:640px){.mini{flex:1}.mini input{width:100%}}
+
+/* ---------- share to WhatsApp ---------- */
+:root{--wa:#25D366}
+:root[data-theme="light"]{--wa:#0f7d63}
+.wa-pair{display:inline-flex;gap:4px;align-items:stretch}
+.btn-wa{
+  display:inline-flex;align-items:center;gap:8px;color:var(--text);
+  background:color-mix(in srgb,var(--wa) 13%,transparent);
+  border-color:color-mix(in srgb,var(--wa) 38%,transparent);
+}
+.btn-wa:hover{background:color-mix(in srgb,var(--wa) 22%,transparent);border-color:var(--wa)}
+.wa-icon{width:17px;height:17px;color:var(--wa);flex:0 0 auto}
+.btn-copy{padding:11px 13px;font-size:15px;line-height:1}
+.card-head .wa-pair{margin-left:auto}
+@media (max-width:700px){
+  .card-head .wa-pair{margin-left:0;order:4}
+  .wa-pair{width:100%}
+  .wa-pair .btn-wa{flex:1;justify-content:center}
+}

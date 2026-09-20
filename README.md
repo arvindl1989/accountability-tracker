@@ -84,6 +84,50 @@ table. That's a deliberate trade for a three-person tracker with no login — bu
 keep the key in the app's Settings screen, not in this repo, and don't post it
 anywhere public.
 
+## WhatsApp
+
+**Today → Share day** and **Board → Share the board** open WhatsApp with the text
+already written; you pick the group and hit send. Nothing is sent automatically
+and nothing leaves the app until you tap send.
+
+```
+*🏆 Accountability Club*
+_week of Sep 14 – Sep 20_
+
+🥇 *Sai* · 147 pts
+     6/7 days · 65,185 steps · 🔥6
+🥈 *Abhinandh* · 143 pts
+     5/7 days · 60,685 steps · 🔥2
+🥉 *Arvind* · 104 pts
+     4/7 days · 27,473 steps · 🔥1
+
+153,343 steps between us, 15/21 days logged.
+```
+
+The `⧉` button beside each one copies the same text instead, for anywhere that
+isn't WhatsApp. If the app is hosted (not opened from a local file), the board
+share includes a link back to it.
+
+### What about a bot that logs for us automatically?
+
+Possible, but it costs more than it looks. Meta's **WhatsApp Groups API** (2026)
+does support this — a bot number in the group gets a webhook for every message a
+participant sends, so "14k steps, 84.2" could post itself into the tracker.
+Groups cap at 8 participants including the bot, so three friends fit fine.
+
+What it would take:
+
+- The group must be **created by the bot** through the API; people join by an
+  invite link it generates. An existing group chat can't be adopted.
+- An **always-on server** for the webhook. GitHub Pages only serves files — this
+  would be a Supabase Edge Function writing to the same `club_data` table.
+- A **dedicated phone number** (not a personal WhatsApp) on an Official Business
+  Account. Groups aren't available on WhatsApp Business *app* numbers.
+- **Per-message billing**, including service messages since 1 Oct 2026.
+
+Unofficial bridges (Baileys and friends) work in an existing group with none of
+that setup, but they violate WhatsApp's terms and the number can be banned.
+
 ## Your data
 
 Everything lives in your browser's `localStorage` under `ac.club.v1`, and in your
@@ -101,6 +145,7 @@ index.html      markup and the script tags
 css/styles.css  design tokens, layout, both themes
 js/store.js     records, dates, scoring, streaks, Supabase sync
 js/charts.js    the SVG line and bar charts, tooltips, table view
+js/share.js     composes the WhatsApp summaries
 js/app.js       views, rendering, events
 ```
 
