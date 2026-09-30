@@ -2,7 +2,10 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    # This repo's default branch is currently claude/gallant-brahmagupta-wf1kip,
+    # so `main` alone would never fire. Both are listed: rename the branch to
+    # main in GitHub whenever you like and this keeps working either way.
+    branches: [main, 'claude/**']
   workflow_dispatch:
 
 permissions:

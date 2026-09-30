@@ -532,7 +532,9 @@
   }
   function totalLogged() {
     var recs = Store.records(), n = 0;
-    Object.keys(recs).forEach(function (k) { if (k.indexOf('entry:') === 0) n++; });
+    Object.keys(recs).forEach(function (k) {
+      if (k.indexOf('entry:') === 0 && recs[k].v) n++;         // skip tombstones
+    });
     return n;
   }
 

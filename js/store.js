@@ -121,14 +121,17 @@ var Store = (function () {
       steps: num(e.steps), weight: num(e.weight), active: num(e.active),
       workout: e.workout || '', habits: (e.habits || []).slice(), note: (e.note || '').trim()
     };
-    if (isEmpty(clean)) delete data.records[entryKey(pid, date)];
+    // An emptied day becomes a tombstone (null), never a missing key: sync merges
+    // on presence, so an outright delete would just be restored by the next pull
+    // from whoever still had the row.
+    if (isEmpty(clean)) set(entryKey(pid, date), null);
     else set(entryKey(pid, date), clean);
     saveData();
     // Deliberately no emit(): a save happens while someone is still typing, and
     // a full re-render would yank the caret out of the field under them. The
     // caller refreshes the derived widgets instead.
   }
-  function clearEntry(pid, date) { delete data.records[entryKey(pid, date)]; saveData(); }
+  function clearEntry(pid, date) { set(entryKey(pid, date), null); saveData(); }
 
   function isEmpty(e) {
     return e.steps === null && e.weight === null && e.active === null &&
@@ -256,8 +259,11 @@ var Store = (function () {
   function resetAll() { data = { records: {} }; saveData(); emit(); }
 
   function stats() {
-    var entries = Object.keys(data.records).filter(function (k) { return k.indexOf('entry:') === 0; });
-    return { entries: entries.length, records: Object.keys(data.records).length };
+    var keys = Object.keys(data.records);
+    var entries = keys.filter(function (k) {
+      return k.indexOf('entry:') === 0 && data.records[k].v;   // tombstones are not days
+    });
+    return { entries: entries.length, records: keys.length };
   }
 
   load();

@@ -4,20 +4,57 @@ A small daily tracker for **Arvind, Abhinandh and Sai** — steps, weight, activ
 minutes, workouts and habits, with a weekly leaderboard so nobody quietly
 disappears for three weeks.
 
-No accounts, no app store, no build step. One HTML page, three JS files.
+No accounts, no app store, no build step. One HTML page, four small JS files.
 
 ---
 
-## Using it
+## Going live
 
-Open `index.html` — that's it. It works offline and remembers everything in your
-browser.
+Two independent things, in this order. The first gets you a URL; the second is
+what makes the board shared. Neither needs the other.
 
-To get it on your phones, turn on GitHub Pages for this repo
-(**Settings → Pages → Source: GitHub Actions**) and push. The included workflow
-publishes the site, and you'll get a URL like
-`https://arvindl1989.github.io/accountability-tracker/`. On iOS, *Share → Add to
-Home Screen* makes it behave like an app.
+### 1. Put it on the web (5 minutes, no database)
+
+1. In this repo: **Settings → Pages → Source: GitHub Actions**. This is the one
+   step I can't do for you — it needs repo admin.
+2. Push anything, or run the **Deploy to GitHub Pages** workflow by hand from
+   the Actions tab.
+3. You'll get `https://arvindl1989.github.io/accountability-tracker/`. On your
+   phone, *Share → Add to Home Screen* makes it behave like an app.
+
+At this point all three of you can use it — but each on your own device, with
+your own data. That's already usable.
+
+*Optional tidy-up:* this repo's default branch is currently
+`claude/gallant-brahmagupta-wf1kip`. **Settings → Branches** lets you rename it
+to `main`; the deploy workflow is set up to work either way.
+
+### 2. Make it a shared board (Postgres)
+
+1. Create a free project at [supabase.com](https://supabase.com).
+2. Open **SQL Editor → New query**, paste the whole of
+   [`supabase/schema.sql`](supabase/schema.sql), and run it. It ends by printing
+   the table, so you'll see it worked. Re-running it later is safe.
+3. **Project Settings → API**: copy the **Project URL** and the **anon public**
+   key.
+4. Each of you pastes both into **Settings → Shared board** in the app and taps
+   *Turn on & sync*.
+
+Everyone's edits then merge on open, on tab focus, and shortly after you log
+something. The newest write wins.
+
+**What the schema does beyond creating a table:** it constrains keys to the
+three shapes the app writes, caps each row at 4 KB, clamps the merge clock to
+the server's (a phone with its date set to 2099 would otherwise win every merge
+forever), and grants no DELETE at all — so even someone holding the key can't
+erase your history.
+
+**Be aware:** the anon key lets anyone holding it read and write your table.
+That's the deliberate trade for a three-person tracker with no login. The key
+lives in each of your browsers, not in this repo — keep it out of anywhere
+public. If you ever want it properly locked down, the upgrade is Supabase
+magic-link auth plus a policy keyed on `auth.uid()`, which costs each of you a
+one-time sign-in.
 
 ## The four tabs
 
@@ -48,41 +85,6 @@ number, which is the point — the tracker rewards consistency, not heroics.
 
 A **streak** counts consecutive days with anything logged. It survives until the
 day is actually over, so logging tomorrow morning doesn't cost you yesterday.
-
-## Sharing one board between the three of you (optional)
-
-Out of the box the app is private to your own device. To see each other's
-numbers, point all three of you at the same free Supabase project:
-
-1. Create a project at [supabase.com](https://supabase.com) (free tier is plenty).
-2. In the SQL editor, run:
-
-   ```sql
-   create table if not exists public.club_data (
-     key        text primary key,
-     value      jsonb  not null,
-     updated_ms bigint not null default 0
-   );
-
-   alter table public.club_data enable row level security;
-
-   create policy "club can read"   on public.club_data for select using (true);
-   create policy "club can insert" on public.club_data for insert with check (true);
-   create policy "club can update" on public.club_data for update using (true) with check (true);
-   ```
-
-3. In **Project Settings → API**, copy the **Project URL** and the **anon public**
-   key.
-4. Each of you pastes both into **Settings → Shared board** and hits
-   *Turn on & sync*.
-
-Then edits sync when you open the app, when you switch back to the tab, and a
-moment after you log something. Conflicts resolve by whoever saved last.
-
-**Be aware:** those policies let anyone holding the anon key read and write the
-table. That's a deliberate trade for a three-person tracker with no login — but
-keep the key in the app's Settings screen, not in this repo, and don't post it
-anywhere public.
 
 ## WhatsApp
 
@@ -147,6 +149,7 @@ js/store.js     records, dates, scoring, streaks, Supabase sync
 js/charts.js    the SVG line and bar charts, tooltips, table view
 js/share.js     composes the WhatsApp summaries
 js/app.js       views, rendering, events
+supabase/       schema.sql for the shared board
 ```
 
 No framework, no bundler, no dependencies at runtime. Charts are hand-rolled SVG
@@ -158,6 +161,16 @@ both the light and dark surfaces, so nobody's line disappears.
 
 ```sh
 npm install && npm test   # drives the real page in a headless browser
+```
+
+55 checks across three suites: the UI, the WhatsApp share text, and a two-device
+sync test that runs both browsers against a stand-in for Supabase's REST API.
+That mock keeps rows in memory by default so the suite runs anywhere. To exercise
+`supabase/schema.sql` itself, point it at a real Postgres that has the schema
+applied:
+
+```sh
+SYNC_TEST_PG=1 PGHOST=/path/to/socket PGPORT=5432 npm test
 ```
 
 ## Adding a fourth person
