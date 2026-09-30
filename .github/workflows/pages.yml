@@ -25,8 +25,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # enablement turns Pages on via the API if it is off, which saves a trip to
-      # repo settings. It needs the pages:write permission granted above.
+      # NOTE: Pages must be switched on by a human once, at
+      #   Settings -> Pages -> Source: GitHub Actions
+      # Until that is done every run here fails on this step with "Get Pages
+      # site failed". GITHUB_TOKEN cannot do it: creating a Pages site needs
+      # admin rights the Actions token is never granted, and asking for it
+      # returns "Resource not accessible by integration". The flag below is
+      # only useful afterwards, to re-enable Pages if it is ever turned off.
       - uses: actions/configure-pages@v5
         with:
           enablement: true

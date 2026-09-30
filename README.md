@@ -15,8 +15,13 @@ what makes the board shared. Neither needs the other.
 
 ### 1. Put it on the web (5 minutes, no database)
 
-1. In this repo: **Settings → Pages → Source: GitHub Actions**. This is the one
-   step I can't do for you — it needs repo admin.
+1. In this repo: **Settings → Pages → Source: GitHub Actions**.
+
+   **This is mandatory and nothing works without it.** Until it's done, every
+   deploy fails on its first step with *"Get Pages site failed"* and the site
+   serves nothing at all. It can't be automated: creating a Pages site needs
+   admin rights that the Actions token is never granted, so the workflow gets
+   *"Resource not accessible by integration"* if it tries.
 2. Push anything, or run the **Deploy to GitHub Pages** workflow by hand from
    the Actions tab.
 3. You'll get `https://arvindl1989.github.io/accountability-tracker/`. On your
