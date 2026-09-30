@@ -23,6 +23,27 @@ Check **Railway → your service → Settings → Source** is pointing at the br
 you actually push to. A service pinned to a branch that never moves will serve
 the same build forever no matter how much you commit.
 
+`railway.json` pins the start command and points Railway's healthcheck at
+`/rest/v1/health`, so a deploy that fails to come up is marked failed instead of
+quietly going live. The healthcheck deliberately passes even with no database —
+the app still serves, and the shared board reports its own state separately.
+
+#### "The train has not arrived at the station"
+
+Railway's own 404. It means nothing is routed to a running service, and it is
+almost never the app:
+
+1. **No public domain.** A service has no public URL until you make one:
+   **Settings → Networking → Public Networking → Generate Domain**. If it asks
+   which port, the app listens on `PORT`, which Railway sets.
+2. **No successful deployment.** Check the **Deployments** tab — if the newest
+   one is red, the old build is not still serving; nothing is.
+3. **Crashed on boot.** The deploy log shows the check summary above. No summary
+   at all means the process never started.
+
+The app binds to every interface, so this is not a case of it listening only on
+localhost.
+
 *Static hosting instead?* There's a GitHub Pages workflow in
 `.github/workflows/pages.yml`, but it's **manual-only** and switched off by
 default: Pages has to be enabled by hand first (**Settings → Pages → Source:
