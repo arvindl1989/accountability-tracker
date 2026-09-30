@@ -653,10 +653,12 @@
         '</div>' +
         '<div class="btn-row">' +
           '<button class="btn btn-primary" id="syncSave">' + (s.on ? 'Save & sync now' : 'Turn on & sync') + '</button>' +
+          '<button class="btn btn-ghost" id="syncTest">Test connection</button>' +
           (s.on ? '<button class="btn btn-ghost" id="syncOff">Turn off</button>' : '') +
           '<span class="spacer"></span>' +
           '<span class="saved-note">' + (Store.prefs.lastPull ? 'Last synced ' + new Date(Store.prefs.lastPull).toLocaleString() : 'Never synced') + '</span>' +
         '</div>' +
+        '<div id="syncReport"></div>' +
       '</section>' +
 
       '<section class="card">' +
@@ -734,7 +736,10 @@
     clearTimeout(pushTimer);
     pushTimer = setTimeout(function () {
       Sync.push().then(function () { renderSyncStatus('ok', 'Synced'); })
-        .catch(function (err) { renderSyncStatus('err', 'Sync error'); console.warn(err); });
+        .catch(function (err) {
+          renderSyncStatus('err', 'Sync error — open Settings and Test connection');
+          console.warn(err);
+        });
     }, 1200);
   }
 
@@ -855,6 +860,7 @@
     if ((n = hit('[data-set-theme]'))) { Store.prefs.theme = n.dataset.setTheme; Store.savePrefs(); render(); return; }
 
     if (hit('#syncSave')) { saveSync(); return; }
+    if (hit('#syncTest')) { runDiagnostic(); return; }
     if (hit('#syncOff')) { Sync.save(el('syncUrl').value, el('syncKey').value, false); toast('Sync off'); render(); return; }
     if (hit('#exportBtn')) { doExport(); return; }
     if (hit('#importBtn')) { el('importFile').click(); return; }
@@ -924,6 +930,25 @@
     });
   }
 
+  function runDiagnostic() {
+    var box = el('syncReport');
+    var url = el('syncUrl'), key = el('syncKey');
+    // test what is on screen, so you can check a key before committing to it
+    if (url && key) Sync.save(url.value, key.value, Sync.cfg().on);
+    box.innerHTML = '<div class="report"><p class="report-line">Testing…</p></div>';
+
+    Sync.diagnose().then(function (r) {
+      box.innerHTML = '<div class="report' + (r.ok ? ' report-ok' : ' report-bad') + '">' +
+        r.steps.map(function (st) {
+          return '<p class="report-line"><span class="report-mark">' + (st.ok ? '✓' : '✕') + '</span>' +
+            '<b>' + esc(st.name) + '</b><span>' + esc(st.detail) + '</span></p>';
+        }).join('') +
+        (r.hint ? '<p class="report-hint">' + esc(r.hint) + '</p>' : '') +
+      '</div>';
+      renderSyncStatus(r.ok ? 'ok' : 'err', r.ok ? 'Synced' : 'Sync error');
+    });
+  }
+
   function doExport() {
     var blob = new Blob([Store.exportJSON()], { type: 'application/json' });
     var a = document.createElement('a');
@@ -957,7 +982,10 @@
     renderSyncStatus('', 'Syncing…');
     Sync.pull()
       .then(function () { renderSyncStatus('ok', 'Synced'); })
-      .catch(function (err) { renderSyncStatus('err', 'Sync error'); console.warn(err); });
+      .catch(function (err) {
+        renderSyncStatus('err', 'Sync error — open Settings and Test connection');
+        console.warn(err);
+      });
   }
   var resizeTimer = null;
   window.addEventListener('resize', function () {

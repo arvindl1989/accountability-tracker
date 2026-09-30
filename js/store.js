@@ -388,10 +388,75 @@ var Sync = (function () {
     return res.status === 204 ? [] : res.json().catch(function () { return []; });
   }
 
+  /* Answers "why isn't my data showing up" with something specific. Walks the
+   * same path a real sync takes — reach the endpoint, read, write, read back —
+   * and names the first thing that fails. */
+  function diagnose() {
+    var c = cfg();
+    var steps = [];
+    var done = function (ok, hint) { return { ok: ok, steps: steps, hint: hint }; };
+
+    if (!c.url || !c.key) {
+      steps.push({ name: 'Configuration', ok: false,
+        detail: 'No project URL or key saved yet — sync is off, so nothing is being sent anywhere.' });
+      return Promise.resolve(done(false, 'Paste your Supabase project URL and anon public key above, then Turn on & sync.'));
+    }
+    steps.push({ name: 'Configuration', ok: true, detail: c.url });
+
+    return fetch(base() + '?select=key&limit=1', { headers: headers() })
+      .then(function (res) {
+        if (res.status === 401 || res.status === 403) {
+          steps.push({ name: 'Read', ok: false, detail: 'Rejected (' + res.status + ')' });
+          throw { stop: true, hint: 'The server answered but refused the key. Check you copied the ' +
+            'anon public key from Project Settings → API, not a different one.' };
+        }
+        if (res.status === 404) {
+          steps.push({ name: 'Read', ok: false, detail: 'No club_data table (404)' });
+          throw { stop: true, hint: 'Reached the server, but there is no club_data table on it. ' +
+            'Run supabase/schema.sql in the SQL editor.' };
+        }
+        if (!res.ok) {
+          steps.push({ name: 'Read', ok: false, detail: 'HTTP ' + res.status });
+          throw { stop: true, hint: 'The server answered with an error. The full text is in the browser console.' };
+        }
+        steps.push({ name: 'Read', ok: true, detail: 'club_data is readable' });
+        return push();
+      })
+      .then(function (n) {
+        steps.push({ name: 'Write', ok: true, detail: n + ' record' + (n === 1 ? '' : 's') + ' sent' });
+        return fetch(base() + '?select=key', { headers: headers() });
+      })
+      .then(function (res) { return res.json(); })
+      .then(function (rows) {
+        steps.push({ name: 'Read back', ok: true, detail: rows.length + ' row' + (rows.length === 1 ? '' : 's') + ' on the server' });
+        return done(true, rows.length ? '' : 'Connected, but the table is empty — log a day and it should appear.');
+      })
+      .catch(function (err) {
+        if (err && err.stop) return done(false, err.hint);
+        // fetch rejects rather than returning a status when the host cannot be
+        // reached at all — the usual cause is not a Supabase URL.
+        if (err instanceof TypeError) {
+          steps.push({ name: 'Reach the server', ok: false, detail: 'No response' });
+          return done(false, 'Could not reach that address at all. Three usual causes: the URL is wrong; ' +
+            'the app was opened as a local file rather than from a web address, which browsers block; or it is ' +
+            'not a Supabase REST endpoint. A plain Postgres connection string will never work here — the app ' +
+            'speaks HTTP to Supabase, not the Postgres wire protocol.');
+        }
+        var msg = (err && err.message) || String(err);
+        if (/401|403/.test(msg)) {
+          steps.push({ name: 'Write', ok: false, detail: msg.slice(0, 120) });
+          return done(false, 'Readable but not writable — the insert/update policies or the anon grants are ' +
+            'missing. Re-running supabase/schema.sql fixes both.');
+        }
+        steps.push({ name: 'Write', ok: false, detail: msg.slice(0, 160) });
+        return done(false, 'The write was rejected. The message above is straight from the server.');
+      });
+  }
+
   function save(url, key, on) {
     Store.prefs.sync = { url: (url || '').trim(), key: (key || '').trim(), on: !!on };
     Store.savePrefs();
   }
 
-  return { enabled: enabled, pull: pull, push: push, full: full, save: save, cfg: cfg };
+  return { enabled: enabled, pull: pull, push: push, full: full, save: save, cfg: cfg, diagnose: diagnose };
 })();

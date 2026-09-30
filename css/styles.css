@@ -439,3 +439,18 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
 .linkrow{display:flex;align-items:center;gap:10px;padding:5px 0}
 .linkrow code{font-family:var(--mono);font-size:12.5px;color:var(--text-dim);flex:1}
 .linkrow .btn-copy{padding:7px 11px;font-size:14px}
+
+/* ---------- sync diagnostic ---------- */
+.report{margin-top:14px;padding:13px 15px;border-radius:var(--radius-sm);
+  border:1px solid var(--line);background:var(--bg-elev-2)}
+.report-ok{border-color:color-mix(in srgb,var(--good) 40%,transparent)}
+.report-bad{border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
+.report-line{display:flex;gap:9px;align-items:baseline;margin:0 0 6px;font-size:13px;color:var(--text-dim)}
+.report-line:last-of-type{margin-bottom:0}
+.report-mark{width:14px;flex:0 0 auto;font-weight:700}
+.report-ok .report-mark{color:var(--good)}
+.report-bad .report-line:last-of-type .report-mark{color:var(--bad)}
+.report-line b{color:var(--text);font-weight:600;min-width:92px}
+.report-line span:last-child{word-break:break-word}
+.report-hint{margin:11px 0 0;padding-top:11px;border-top:1px solid var(--line);
+  font-size:13px;line-height:1.55;color:var(--text)}

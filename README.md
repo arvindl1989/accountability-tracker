@@ -43,6 +43,30 @@ to `main`; the deploy workflow is set up to work either way.
 Everyone's edits then merge on open, on tab focus, and shortly after you log
 something. The newest write wins.
 
+**If nothing is reaching the database**, hit **Test connection** in Settings. It
+walks the same path a real sync takes — reach the server, read, write, read back
+— and names the first thing that fails. The usual answers:
+
+| What it says | What it means |
+|---|---|
+| Sync is off | The commonest one. Nothing is being sent anywhere until you paste the URL and key and turn it on. The app is happily local until then. |
+| Could not reach that address | Wrong URL, the app opened as a `file://` path, or it isn't a Supabase endpoint. **A plain Postgres connection string will never work** — see below. |
+| Refused the key | Right server, wrong key. Copy the *anon public* one from Project Settings → API. |
+| No club_data table | Right server, schema not run. Paste `supabase/schema.sql` into the SQL editor. |
+| Readable but not writable | The policies or grants are missing. Re-running `supabase/schema.sql` fixes both. |
+
+### A plain Postgres is not enough
+
+The app talks to `/rest/v1/club_data` over HTTPS — that's **PostgREST**, the
+HTTP layer Supabase puts in front of Postgres. It does not speak the Postgres
+wire protocol and cannot open a database connection from a browser, because no
+browser can.
+
+So a `DATABASE_URL` from Railway, Neon, RDS or anywhere else won't work on its
+own, however healthy the database is. Either use Supabase, which bundles
+PostgREST, or run PostgREST yourself in front of your own Postgres and point the
+app at that.
+
 **What the schema does beyond creating a table:** it constrains keys to the
 three shapes the app writes, caps each row at 4 KB, clamps the merge clock to
 the server's (a phone with its date set to 2099 would otherwise win every merge
@@ -189,9 +213,10 @@ both the light and dark surfaces, so nobody's line disappears.
 npm install && npm test   # drives the real page in a headless browser
 ```
 
-93 checks across four suites: the UI, sign-in / sign-out and personal links, the
-WhatsApp share text, and a two-device sync test that runs both browsers against
-a stand-in for Supabase's REST API.
+104 checks across five suites: the UI, sign-in / sign-out and personal links,
+the WhatsApp share text, a two-device sync test that runs both browsers against
+a stand-in for Supabase's REST API, and the connection diagnostic against each
+way the shared board actually fails.
 That mock keeps rows in memory by default so the suite runs anywhere. To exercise
 `supabase/schema.sql` itself, point it at a real Postgres that has the schema
 applied:
