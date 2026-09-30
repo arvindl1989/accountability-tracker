@@ -362,8 +362,10 @@ var Sync = (function () {
       });
   }
 
-  function push() {
-    if (!enabled()) return Promise.reject(new Error('Sync is off'));
+  // The write itself, with no check on whether sync is switched on. Testing a
+  // connection has to be possible before committing to it, so diagnose() uses
+  // this directly; push() is the same thing behind the on/off gate.
+  function sendRows() {
     var recs = Store.records();
     var rows = Object.keys(recs).map(function (k) {
       return { key: k, value: recs[k].v, updated_ms: recs[k].t || 0 };
@@ -374,6 +376,11 @@ var Sync = (function () {
       headers: headers({ Prefer: 'resolution=merge-duplicates,return=minimal' }),
       body: JSON.stringify(rows)
     }).then(check).then(function () { return rows.length; });
+  }
+
+  function push() {
+    if (!enabled()) return Promise.reject(new Error('Sync is off'));
+    return sendRows();
   }
 
   // Pull first so we never clobber a friend's newer entry, then push the merge.
@@ -420,7 +427,7 @@ var Sync = (function () {
           throw { stop: true, hint: 'The server answered with an error. The full text is in the browser console.' };
         }
         steps.push({ name: 'Read', ok: true, detail: 'club_data is readable' });
-        return push();
+        return sendRows();          // not push(): sync may not be switched on yet
       })
       .then(function (n) {
         steps.push({ name: 'Write', ok: true, detail: n + ' record' + (n === 1 ? '' : 's') + ' sent' });
@@ -449,7 +456,9 @@ var Sync = (function () {
             'missing. Re-running supabase/schema.sql fixes both.');
         }
         steps.push({ name: 'Write', ok: false, detail: msg.slice(0, 160) });
-        return done(false, 'The write was rejected. The message above is straight from the server.');
+        return done(false, /^Sync failed \(/.test(msg)
+          ? 'The server rejected the write; its own message is above.'
+          : 'The write could not be completed. The detail above says why.');
       });
   }
 

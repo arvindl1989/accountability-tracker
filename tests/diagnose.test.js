@@ -28,16 +28,16 @@ function stub(mode) {
   return new Promise(r => srv.listen(0, '127.0.0.1', () => r({ srv, port: srv.address().port })));
 }
 
-async function report(browser, { url, key }) {
+async function report(browser, { url, key, on }) {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   page.on('pageerror', e => { console.log('  pageerror: ' + e.message); fails++; });
-  await page.addInitScript(([d, u, k]) => {
+  await page.addInitScript(([d, u, k, o]) => {
     localStorage.setItem('ac.club.v1', JSON.stringify(d));
     localStorage.setItem('ac.prefs.v1', JSON.stringify({
-      me: 'arvind', theme: 'dark', sync: { url: u, key: k, on: !!u }
+      me: 'arvind', theme: 'dark', sync: { url: u, key: k, on: o }
     }));
-  }, [seed(), url, key]);
+  }, [seed(), url, key, on === undefined ? !!url : on]);
   await page.goto(APP);
   await page.click('.tab[data-view="settings"]');
   await page.waitForTimeout(250);
@@ -84,6 +84,15 @@ async function report(browser, { url, key }) {
   s.srv.close();
   ok(/Read back/.test(t) && /row/.test(t), 'working: confirms rows landed on the server');
   ok(!/✕/.test(t), 'working: reports no failures');
+
+  // Testing a connection is what you do BEFORE turning sync on, so it must not
+  // require sync to already be on.
+  s = await stub('ok');
+  t = await report(browser, { url: `http://127.0.0.1:${s.port}`, key: KEY, on: false });
+  s.srv.close();
+  ok(!/Sync is off/.test(t), 'a test with sync switched off does not report "Sync is off"');
+  ok(/Read back/.test(t) && !/✕/.test(t),
+     'it completes the whole round trip with sync still off');
 
   await browser.close();
   console.log(fails ? `\n${fails} FAILING` : '\nAll diagnostic checks passed.');
