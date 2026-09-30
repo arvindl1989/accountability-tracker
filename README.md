@@ -41,6 +41,15 @@ almost never the app:
 3. **Crashed on boot.** The deploy log shows the check summary above. No summary
    at all means the process never started.
 
+#### "Application failed to respond"
+
+Different error, different cause: the platform reached the service but got no
+answer on the port. The app opens its port before doing anything with the
+database, and answers in about 100ms even with no database at all, so a slow or
+missing database is not the cause. Check the port the domain targets matches the
+`PORT` the app is given, and that the deployment is actually running rather than
+merely built.
+
 The app binds to every interface, so this is not a case of it listening only on
 localhost.
 
@@ -302,7 +311,7 @@ both the light and dark surfaces, so nobody's line disappears.
 npm install && npm test   # drives the real page in a headless browser
 ```
 
-121 checks across six suites: the UI, sign-in / sign-out and personal links, the
+124 checks across six suites: the UI, sign-in / sign-out and personal links, the
 WhatsApp share text, a two-device sync test, the connection diagnostic against
 each way the shared board fails, and an end-to-end run of the real `server.js`
 against a real Postgres with two browsers talking to it.

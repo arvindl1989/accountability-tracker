@@ -148,6 +148,34 @@ function waitFor(port, tries = 80) {
 
     h = await health(PORT);
     ok(h.database && h.schema && h.locked, 'a correctly set up server reports all clear');
+
+    // ---- an unreachable database must never stop the app being served ----
+    // This is what "Application failed to respond" was: the port stayed shut
+    // while a dead database was waited on.
+    // spawned directly, and the wait is on the app itself — polling health first
+    // would measure the health call rather than how soon the app is served
+    const t0 = Date.now();
+    const blackhole = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
+      env: Object.assign({}, process.env, {
+        PORT: '8406', CLUB_KEY: KEY, DATABASE_URL: 'postgresql://u:p@192.0.2.123:5432/db'
+      }), stdio: 'ignore'
+    });
+    const page = await new Promise(resolve => {
+      const tick = () => http.get({ host: '127.0.0.1', port: 8406, path: '/index.html' },
+        res => { res.resume(); resolve({ code: res.statusCode, ms: Date.now() - t0 }); })
+        .on('error', () => setTimeout(tick, 50));
+      tick();
+    });
+    ok(page.code === 200, 'the app is served even when the database is unreachable');
+    ok(page.ms < 5000, `and without waiting on it (served in ${page.ms}ms)`);
+
+    const hStart = Date.now();
+    h = await health(8406);
+    const hMs = Date.now() - hStart;
+    ok(h.database === false && /Cannot reach/.test(h.detail || ''),
+       'health still names the database problem');
+    ok(hMs < 6000, `health answers promptly rather than hanging (${hMs}ms)`);
+    blackhole.kill();
   } catch (e) {
     ok(false, 'unexpected failure: ' + e.message);
   } finally {

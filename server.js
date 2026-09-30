@@ -28,7 +28,10 @@ const pool = DB_URL
       connectionString: DB_URL,
       ssl: isLocal ? false : { rejectUnauthorized: false },
       max: 4,
-      idleTimeoutMillis: 30000
+      idleTimeoutMillis: 30000,
+      // Without this a connection to a host that drops packets hangs for
+      // minutes instead of failing, and every query behind it hangs too.
+      connectionTimeoutMillis: 8000
     })
   : null;
 
@@ -38,6 +41,20 @@ async function migrate() {
   const sql = fs.readFileSync(path.join(ROOT, 'supabase', 'schema.sql'), 'utf8');
   await pool.query(sql);           // idempotent, and skips the anon grants here
   console.log('schema applied');
+}
+
+// A managed database is often not reachable in the first seconds of a
+// container's life, so a single attempt at boot is a coin toss.
+async function migrateWithRetry(attempts = 5) {
+  for (let i = 1; i <= attempts; i++) {
+    try { await migrate(); return true; }
+    catch (e) {
+      const last = i === attempts;
+      console.warn(`schema attempt ${i}/${attempts} failed: ${e.message}` + (last ? '' : ' — retrying'));
+      if (last) return false;
+      await new Promise(r => setTimeout(r, i * 2000));
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ static */
@@ -116,21 +133,33 @@ async function upsert(res, body) {
 
 /* Unauthenticated callers get booleans only — enough to diagnose, nothing worth
  * knowing. The record count needs the key. */
+// This is the platform's healthcheck path, so it must always answer quickly.
+// A database that is merely slow must never make the container look dead.
+function withTimeout(promise, ms, label) {
+  let timer;
+  return Promise.race([
+    promise.finally(() => clearTimeout(timer)),
+    new Promise((_, rej) => { timer = setTimeout(() => rej(new Error(label)), ms); })
+  ]);
+}
+
 async function checkHealth(trusted) {
   const out = { club: true, configured: !!pool, locked: !!CLUB_KEY, database: false, schema: false };
   if (!pool) { out.detail = 'No DATABASE_URL on this server.'; return out; }
   try {
-    await pool.query('select 1');
+    await withTimeout(pool.query('select 1'), 2500, 'the database did not answer within 2.5s');
     out.database = true;
   } catch (e) {
     out.detail = 'Cannot reach the database: ' + e.message;
     return out;
   }
-  const { rows } = await pool.query("select to_regclass('public.club_data') is not null as ok");
+  const { rows } = await withTimeout(
+    pool.query("select to_regclass('public.club_data') is not null as ok"), 2500, 'timed out');
   out.schema = rows[0].ok;
   if (!out.schema) { out.detail = 'Connected, but club_data does not exist — the schema did not apply.'; return out; }
   if (trusted) {
-    const c = await pool.query('select count(*)::int as n from public.club_data');
+    const c = await withTimeout(
+      pool.query('select count(*)::int as n from public.club_data'), 2500, 'timed out');
     out.records = c.rows[0].n;
   }
   if (!out.locked) out.detail = 'No CLUB_KEY set, so the data API is switched off.';
@@ -179,14 +208,9 @@ const server = http.createServer((req, res) => {
   json(res, 405, { message: 'Method not allowed' });
 });
 
-async function start() {
-  if (pool) {
-    try { await migrate(); }
-    catch (e) { console.error('schema failed to apply:', e.message); }
-  }
-
-  // Printed on every boot, because Railway's deploy log is the first place
-  // anyone looks when the board is not syncing.
+// Printed once the database has been checked, because a deploy log is the first
+// place anyone looks when the board is not syncing.
+async function report() {
   const h = await checkHealth(true).catch(e => ({ detail: e.message }));
   const mark = ok => (ok ? '  ok  ' : ' FAIL ');
   console.log('---- accountability club ----');
@@ -200,8 +224,21 @@ async function start() {
     ? '      shared board is ready'
     : '      shared board is OFF — see /rest/v1/health');
   console.log('-----------------------------');
+}
 
-  server.listen(PORT, () => console.log(`listening on ${PORT}`));
+function start() {
+  // Listen FIRST. Nothing about the database may delay this: a host that drops
+  // packets takes minutes to fail, and until the port is open the platform sees
+  // a dead container and serves "Application failed to respond" — even though
+  // the app itself is fine and only the shared board would have been affected.
+  server.listen(PORT, () => {
+    console.log(`listening on ${PORT}`);
+    if (!pool) {
+      console.warn('DATABASE_URL is not set — serving the app, but the data API is off.');
+      return report();
+    }
+    migrateWithRetry().then(report);      // deliberately not awaited
+  });
 }
 
 if (require.main === module) start();
