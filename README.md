@@ -10,29 +10,25 @@ No accounts, no app store, no build step. One HTML page, four small JS files.
 
 ## Going live
 
-Two independent things, in this order. The first gets you a URL; the second is
-what makes the board shared. Neither needs the other.
+Two things: somewhere to serve it from, and somewhere to keep the data. On
+Railway they're the same service.
 
-### 1. Put it on the web (5 minutes, no database)
+### 1. Put it on the web
 
-1. In this repo: **Settings → Pages → Source: GitHub Actions**.
+**The live site runs on Railway.** `npm start` runs `server.js`, which serves the
+app and its data from one process — so hosting and the shared board are the same
+step, covered below.
 
-   **This is mandatory and nothing works without it.** Until it's done, every
-   deploy fails on its first step with *"Get Pages site failed"* and the site
-   serves nothing at all. It can't be automated: creating a Pages site needs
-   admin rights that the Actions token is never granted, so the workflow gets
-   *"Resource not accessible by integration"* if it tries.
-2. Push anything, or run the **Deploy to GitHub Pages** workflow by hand from
-   the Actions tab.
-3. You'll get `https://arvindl1989.github.io/accountability-tracker/`. On your
-   phone, *Share → Add to Home Screen* makes it behave like an app.
+Check **Railway → your service → Settings → Source** is pointing at the branch
+you actually push to. A service pinned to a branch that never moves will serve
+the same build forever no matter how much you commit.
 
-At this point all three of you can use it — but each on your own device, with
-your own data. That's already usable.
-
-*Optional tidy-up:* this repo's default branch is currently
-`claude/gallant-brahmagupta-wf1kip`. **Settings → Branches** lets you rename it
-to `main`; the deploy workflow is set up to work either way.
+*Static hosting instead?* There's a GitHub Pages workflow in
+`.github/workflows/pages.yml`, but it's **manual-only** and switched off by
+default: Pages has to be enabled by hand first (**Settings → Pages → Source:
+GitHub Actions** — the Actions token isn't allowed to do it), and a static host
+can only serve the front end, so the shared board would need Supabase. On
+Railway you need neither.
 
 ### 2. Make it a shared board (Postgres)
 

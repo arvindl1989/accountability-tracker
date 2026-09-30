@@ -1,11 +1,14 @@
 name: Deploy to GitHub Pages
 
+# Manual only. The live site runs on Railway (see README), so this workflow has
+# no job to do on a normal push — and until someone turns Pages on by hand it
+# cannot succeed anyway, so leaving it on push just painted every commit red.
+#
+# If you ever want static hosting as well: enable Pages at
+#   Settings -> Pages -> Source: GitHub Actions
+# then run this from the Actions tab. Note the app is a server now; static
+# hosting serves the front end but needs Supabase for the shared board.
 on:
-  push:
-    # This repo's default branch is currently claude/gallant-brahmagupta-wf1kip,
-    # so `main` alone would never fire. Both are listed: rename the branch to
-    # main in GitHub whenever you like and this keeps working either way.
-    branches: [main, 'claude/**']
   workflow_dispatch:
 
 permissions:
@@ -24,17 +27,12 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      # NOTE: Pages must be switched on by a human once, at
-      #   Settings -> Pages -> Source: GitHub Actions
-      # Until that is done every run here fails on this step with "Get Pages
-      # site failed". GITHUB_TOKEN cannot do it: creating a Pages site needs
-      # admin rights the Actions token is never granted, and asking for it
-      # returns "Resource not accessible by integration". The flag below is
-      # only useful afterwards, to re-enable Pages if it is ever turned off.
+      - uses: actions/checkout@v5
+      # Pages must be switched on by a human first; GITHUB_TOKEN cannot do it.
+      # Creating a Pages site needs admin rights the Actions token is never
+      # granted, which is why enablement returns "Resource not accessible by
+      # integration" rather than helping.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .
