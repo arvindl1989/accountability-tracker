@@ -469,3 +469,14 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
 .banner-text{flex:1;min-width:200px;font-size:13.5px;line-height:1.5;color:var(--text)}
 .banner .btn{padding:9px 15px;font-size:13px}
 @media (max-width:520px){.banner .btn{width:100%}}
+
+/* ---------- club passcode ---------- */
+.login .field{text-align:left}
+.login input[type="password"]{font-size:16px}
+.unlock-error{
+  margin:12px 0 0;font-size:13px;color:var(--bad);
+  background:color-mix(in srgb,var(--bad) 10%,transparent);
+  border:1px solid color-mix(in srgb,var(--bad) 32%,transparent);
+  border-radius:var(--radius-sm);padding:9px 12px;
+}
+.unlock-error[hidden]{display:none}

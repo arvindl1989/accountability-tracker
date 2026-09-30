@@ -36,7 +36,7 @@ var Store = (function () {
   var data = { records: {} };
   // me is '' until someone says who they are — an unanswered question, not a
   // silent default that logs Abhinandh's run against Arvind.
-  var prefs = { me: '', theme: 'dark', sync: { url: '', key: '', on: false }, lastPull: 0 };
+  var prefs = { me: '', theme: 'dark', sync: { url: '', key: '', on: false, mode: '' }, lastPull: 0 };
   var listeners = [];
 
   /* ---------- dates ---------- */
@@ -79,7 +79,9 @@ var Store = (function () {
       prefs.me = p.me || prefs.me;
       prefs.theme = p.theme || prefs.theme;
       prefs.lastPull = p.lastPull || 0;
-      if (p.sync) prefs.sync = { url: p.sync.url || '', key: p.sync.key || '', on: !!p.sync.on };
+      if (p.sync) prefs.sync = {
+        url: p.sync.url || '', key: p.sync.key || '', on: !!p.sync.on, mode: p.sync.mode || ''
+      };
     }
   }
   function saveData() { writeLS(LS_DATA, data); }
@@ -337,18 +339,50 @@ var Sync = (function () {
   'use strict';
 
   function cfg() { return Store.prefs.sync; }
-  function enabled() { var c = cfg(); return !!(c.on && c.url && c.key); }
+  // Cookie mode needs no key: the browser was unlocked once and carries an
+  // HttpOnly cookie the page itself cannot read.
+  function enabled() {
+    var c = cfg();
+    return !!(c.on && c.url && (c.key || c.mode === 'cookie'));
+  }
   function base() { return cfg().url.replace(/\/+$/, '') + '/rest/v1/club_data'; }
   function headers(extra) {
     var c = cfg();
-    var h = { apikey: c.key, Authorization: 'Bearer ' + c.key, 'Content-Type': 'application/json' };
+    var h = { 'Content-Type': 'application/json' };
+    if (c.mode !== 'cookie') { h.apikey = c.key; h.Authorization = 'Bearer ' + c.key; }
     if (extra) Object.keys(extra).forEach(function (k) { h[k] = extra[k]; });
     return h;
+  }
+  function opts(extra) {
+    return Object.assign({ credentials: 'same-origin' }, extra || {});
+  }
+
+  /* Hand the club passcode over once. The server answers with an HttpOnly
+   * cookie, so from here on this device syncs with nothing typed and nothing
+   * stored in the page. */
+  function unlock(passcode) {
+    return fetch(location.origin + '/rest/v1/unlock', opts({
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: passcode })
+    })).then(function (r) {
+      if (r.ok) { save(location.origin, '', true, 'cookie'); return true; }
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        throw new Error(j.message || 'Could not unlock (' + r.status + ')');
+      });
+    });
+  }
+
+  // Served by a club server that has already let this browser in: configure
+  // itself rather than making anyone paste a URL and a key.
+  function adopt() {
+    save(location.origin, '', true, 'cookie');
   }
 
   function pull() {
     if (!enabled()) return Promise.reject(new Error('Sync is off'));
-    return fetch(base() + '?select=key,value,updated_ms', { headers: headers() })
+    return fetch(base() + '?select=key,value,updated_ms', opts({ headers: headers() }))
       .then(check)
       .then(function (rows) {
         var incoming = {};
@@ -371,11 +405,11 @@ var Sync = (function () {
       return { key: k, value: recs[k].v, updated_ms: recs[k].t || 0 };
     });
     if (!rows.length) return Promise.resolve(0);
-    return fetch(base() + '?on_conflict=key', {
+    return fetch(base() + '?on_conflict=key', opts({
       method: 'POST',
       headers: headers({ Prefer: 'resolution=merge-duplicates,return=minimal' }),
       body: JSON.stringify(rows)
-    }).then(check).then(function () { return rows.length; });
+    })).then(check).then(function () { return rows.length; });
   }
 
   function push() {
@@ -403,14 +437,14 @@ var Sync = (function () {
     var steps = [];
     var done = function (ok, hint) { return { ok: ok, steps: steps, hint: hint }; };
 
-    if (!c.url || !c.key) {
+    if (!c.url || !(c.key || c.mode === 'cookie')) {
       steps.push({ name: 'Configuration', ok: false,
         detail: 'No project URL or key saved yet — sync is off, so nothing is being sent anywhere.' });
       return Promise.resolve(done(false, 'Paste your Supabase project URL and anon public key above, then Turn on & sync.'));
     }
     steps.push({ name: 'Configuration', ok: true, detail: c.url });
 
-    return fetch(base() + '?select=key&limit=1', { headers: headers() })
+    return fetch(base() + '?select=key&limit=1', opts({ headers: headers() }))
       .then(function (res) {
         if (res.status === 401 || res.status === 403) {
           steps.push({ name: 'Read', ok: false, detail: 'Rejected (' + res.status + ')' });
@@ -431,7 +465,7 @@ var Sync = (function () {
       })
       .then(function (n) {
         steps.push({ name: 'Write', ok: true, detail: n + ' record' + (n === 1 ? '' : 's') + ' sent' });
-        return fetch(base() + '?select=key', { headers: headers() });
+        return fetch(base() + '?select=key', opts({ headers: headers() }));
       })
       .then(function (res) { return res.json(); })
       .then(function (rows) {
@@ -477,11 +511,13 @@ var Sync = (function () {
     return localProbe;
   }
 
-  function save(url, key, on) {
-    Store.prefs.sync = { url: (url || '').trim(), key: (key || '').trim(), on: !!on };
+  function save(url, key, on, mode) {
+    Store.prefs.sync = {
+      url: (url || '').trim(), key: (key || '').trim(), on: !!on, mode: mode || ''
+    };
     Store.savePrefs();
   }
 
   return { enabled: enabled, pull: pull, push: push, full: full, save: save, cfg: cfg,
-           diagnose: diagnose, detectLocal: detectLocal };
+           diagnose: diagnose, detectLocal: detectLocal, unlock: unlock, adopt: adopt };
 })();

@@ -12,7 +12,8 @@
     lineRange: 30,
     hiddenSeries: [],
     tableMode: { bars: false, line: false },
-    dirty: false
+    dirty: false,
+    needUnlock: false
   };
   var draft = null;
   var pendingCharts = {};
@@ -76,6 +77,22 @@
    * files someone else's run against you, so it is asked before anything else
    * renders. */
   function viewLogin() {
+    if (ui.needUnlock) {
+      return '<section class="login">' +
+        '<span class="login-mark" aria-hidden="true">' +
+          '<svg viewBox="0 0 100 100"><rect width="100" height="100" rx="24"/>' +
+          '<path d="M28 62 L44 44 L56 54 L74 32" fill="none" stroke-width="9" ' +
+          'stroke-linecap="round" stroke-linejoin="round"/></svg></span>' +
+        '<h1>Enter the club passcode</h1>' +
+        '<p>Once per device. After this the app just syncs — nothing else to set up.</p>' +
+        '<div class="field"><input id="passcode" type="password" autocomplete="current-password" ' +
+          'placeholder="Club passcode" aria-label="Club passcode"></div>' +
+        '<div class="btn-row" style="margin-top:14px">' +
+          '<button class="btn btn-primary" id="unlockBtn" style="flex:1">Unlock</button>' +
+        '</div>' +
+        '<p id="unlockError" class="unlock-error" hidden></p>' +
+      '</section>';
+    }
     return '<section class="login">' +
       '<span class="login-mark" aria-hidden="true">' +
         '<svg viewBox="0 0 100 100"><rect width="100" height="100" rx="24"/>' +
@@ -112,8 +129,8 @@
       '<section class="hero">' +
         '<div class="hero-top">' +
           '<div>' +
-            '<h1>' + esc(greeting()) + ', ' + esc(me.name) + '</h1>' +
-            '<div class="date">' + esc(prettyDate(d)) + '</div>' +
+            '<h1>' + esc(heroTitle(me, d)) + '</h1>' +
+            '<div class="date">' + esc(heroSub(me, d)) + '</div>' +
           '</div>' +
           '<div class="hero-streak" id="heroStreak">' + streakHTML(stk) + '</div>' +
         '</div>' +
@@ -177,6 +194,20 @@
     var h = new Date().getHours();
     return h < 12 ? 'Morning' : h < 17 ? 'Afternoon' : 'Evening';
   }
+  function isToday(d) { return d === Store.today(); }
+
+  // A time-of-day greeting makes no sense while you are filling in last Tuesday,
+  // so the hero follows the day on screen rather than the clock.
+  function heroTitle(me, d) {
+    if (isToday(d)) return greeting() + ', ' + me.name;
+    var label = prettyDate(d);
+    return label.indexOf('Yesterday') === 0 ? 'Yesterday' : label.split(',')[0];
+  }
+  function heroSub(me, d) {
+    if (isToday(d)) return prettyDate(d);
+    return Store.parse(d).toLocaleDateString(undefined, { day: 'numeric', month: 'long' }) +
+      ' · catching up as ' + me.name;
+  }
   function streakHTML(n) {
     if (!n) return '<span>🌱</span><span>Start a streak today</span>';
     return '<span>🔥</span><span><b>' + n + '</b> day' + (n === 1 ? '' : 's') + ' in a row</span>';
@@ -188,6 +219,24 @@
 
   function nudgeHTML() {
     var me = Store.me(), today = Store.today();
+
+    // Looking at another day: say something about THAT day. Telling someone
+    // "you logged today" while they are editing last Tuesday is just wrong.
+    if (ui.date !== today) {
+      var past = Store.entry(me.id, ui.date);
+      var when = Charts.dayLabel(ui.date);
+      if (!Store.isLogged(past)) {
+        return nudge('Nothing here yet.', 'Fill in ' + when + ' and it still counts towards the board.');
+      }
+      var bits = [];
+      if (past.steps !== null) bits.push(fmt(past.steps) + ' steps');
+      if (past.active !== null) bits.push(past.active + ' active min');
+      if (past.weight !== null) bits.push(fmt(past.weight) + ' ' + unitLabel());
+      if (past.workout.length) bits.push(past.workout.join(' + '));
+      return nudge(when + ' is logged.',
+        (bits.length ? bits.join(' · ') + ' · ' : '') + Store.score(me.id, ui.date) + ' points.');
+    }
+
     var mine = Store.entry(me.id, today);
     if (!Store.isLogged(mine)) {
       return nudge('Two minutes.', 'Log today before you forget — a blank day breaks the streak.');
@@ -681,11 +730,13 @@
     applyMe();
     renderWhoami();
     renderSyncStatus();
-    var known = Store.hasIdentity();
+    var known = Store.hasIdentity() && !ui.needUnlock;
     document.getElementById('tabs').hidden = !known;
     document.documentElement.classList.toggle('is-signed-out', !known);
     if (!known) {
       view.innerHTML = viewLogin();
+      var pc = el('passcode');
+      if (pc) pc.focus();
       return;
     }
     document.querySelectorAll('.tab').forEach(function (t) {
@@ -866,6 +917,24 @@
 
     if (hit('#syncSave')) { saveSync(); return; }
     if (hit('#syncTest')) { runDiagnostic(); return; }
+    if (hit('#unlockBtn')) {
+      var pc = el('passcode'), err = el('unlockError');
+      var btn = n || document.getElementById('unlockBtn');
+      btn.disabled = true;
+      err.hidden = true;
+      Sync.unlock(pc.value).then(function () {
+        ui.needUnlock = false;
+        toast('Unlocked — this device is set up');
+        render();
+        backgroundPull();
+      }).catch(function (e) {
+        btn.disabled = false;
+        err.textContent = e.message;
+        err.hidden = false;
+        pc.select();
+      });
+      return;
+    }
     if (hit('#bannerGo')) { ui.tab = 'settings'; render(); return; }
     if (hit('#useLocal')) {
       el('syncUrl').value = location.origin;
@@ -873,7 +942,13 @@
       toast('Now paste the club key');
       return;
     }
-    if (hit('#syncOff')) { Sync.save(el('syncUrl').value, el('syncKey').value, false); toast('Sync off'); render(); return; }
+    if (hit('#syncOff')) {
+      // keep the mode, or the next load would treat this device as unconfigured
+      Sync.save(el('syncUrl').value, el('syncKey').value, false, Sync.cfg().mode);
+      toast('Sync off');
+      render();
+      return;
+    }
     if (hit('#exportBtn')) { doExport(); return; }
     if (hit('#importBtn')) { el('importFile').click(); return; }
     if (hit('#resetBtn')) {
@@ -945,6 +1020,22 @@
   /* Silence is the worst answer to "why isn't my data saved". If the site is its
    * own club server, it already knows what is wrong; say so on the screen the
    * person is actually looking at, rather than only in Settings. */
+  /* The site is its own club server, so there is nothing to configure — either
+   * this browser is already let in, or it needs the passcode once. */
+  function considerLocalServer() {
+    return Sync.detectLocal().then(function (info) {
+      if (!info || !info.database) return;
+      if (info.unlocked) {
+        // Adopt only when this device has never been set up. Re-adopting merely
+        // because sync is off would mean Turn off never survived a reload.
+        if (Sync.cfg().mode !== 'cookie') { Sync.adopt(); backgroundPull(); }
+        ui.needUnlock = false;
+      } else if (info.locked && !Sync.enabled()) {
+        ui.needUnlock = true;
+      }
+    });
+  }
+
   function showSyncBanner() {
     Sync.detectLocal().then(function (info) {
       var box = el('syncBanner');
@@ -1062,4 +1153,9 @@
 
   render();
   backgroundPull();
+
+  // Ask the server what it is, then paint again: a device that still needs the
+  // club passcode should land on that rather than on the person picker, and one
+  // already let in should configure itself with nothing typed.
+  considerLocalServer().then(render);
 })();

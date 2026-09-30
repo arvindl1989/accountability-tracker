@@ -117,7 +117,11 @@ function waitFor(port, tries = 80) {
     const bannerFor = async (port, prefs) => {
       const c = await browser.newContext();
       const pg = await c.newPage();
-      await pg.addInitScript(p => localStorage.setItem('ac.prefs.v1', JSON.stringify(p)), prefs);
+      await pg.addInitScript(p => {
+        if (!localStorage.getItem('ac.prefs.v1')) {
+          localStorage.setItem('ac.prefs.v1', JSON.stringify(p));
+        }
+      }, prefs);
       await pg.goto(`http://127.0.0.1:${port}/index.html`);
       await pg.waitForTimeout(1500);
       const t = await pg.textContent('#syncBanner');
@@ -126,13 +130,35 @@ function waitFor(port, tries = 80) {
     };
 
     const signedInNoSync = { me: 'arvind', theme: 'dark' };
-    let b = await bannerFor(PORT, signedInNoSync);
-    ok(/saved on this device only/i.test(b), 'sync off: the banner says data is device-only');
-    ok(/switch the shared board on/i.test(b), 'and points at the fix');
 
-    b = await bannerFor(PORT, { me: 'arvind', theme: 'dark',
+    let b = await bannerFor(PORT, { me: 'arvind', theme: 'dark',
       sync: { url: `http://127.0.0.1:${PORT}`, key: KEY, on: true } });
     ok(b === '', 'sync on and healthy: no banner at all');
+
+    // unlocked, but sync deliberately switched off in Settings
+    const offCtx = await browser.newContext();
+    const offPg = await offCtx.newPage();
+    await offPg.addInitScript(() => {
+      if (!localStorage.getItem('ac.prefs.v1')) {
+        localStorage.setItem('ac.prefs.v1', JSON.stringify({ me: 'arvind', theme: 'dark' }));
+      }
+    });
+    await offPg.goto(`http://127.0.0.1:${PORT}/index.html`);
+    await offPg.waitForTimeout(1200);
+    await offPg.fill('#passcode', KEY);
+    await offPg.click('#unlockBtn');
+    await offPg.waitForTimeout(1200);
+    // through the real button, not by poking localStorage: a background pull
+    // finishing mid-test would write the whole prefs object back over it
+    await offPg.click('.tab[data-view="settings"]');
+    await offPg.waitForTimeout(400);
+    await offPg.click('#syncOff');
+    await offPg.waitForTimeout(400);
+    await offPg.reload();
+    await offPg.waitForTimeout(1500);
+    b = (await offPg.textContent('#syncBanner')).trim();
+    ok(/saved on this device only/i.test(b), 'sync switched off: the banner says data is device-only');
+    await offCtx.close();
 
     const noKeySrv = await bootWith({ CLUB_KEY: '', DATABASE_URL: DB_URL }, 8407);
     b = await bannerFor(8407, signedInNoSync);
@@ -145,6 +171,75 @@ function waitFor(port, tries = 80) {
     ok(/can't reach its database|cannot reach its database/i.test(b),
        'server with no database: the app says that instead');
     noDbSrv.kill();
+
+    // ---- the passcode replaces typing a URL and a key ----
+    const fresh = async (port) => {
+      const c = await browser.newContext();
+      const pg = await c.newPage();
+      pg.on('pageerror', e => { console.log('  pageerror: ' + e.message); fails++; });
+      await pg.addInitScript(() => {          // runs again on reload: do not clobber
+        if (!localStorage.getItem('ac.prefs.v1')) {
+          localStorage.setItem('ac.prefs.v1', JSON.stringify({ me: 'arvind', theme: 'dark' }));
+        }
+      });
+      await pg.goto(`http://127.0.0.1:${port}/index.html`);
+      await pg.waitForTimeout(1200);
+      return { c, pg };
+    };
+
+    let u = await fresh(PORT);
+    ok(await u.pg.locator('#passcode').count() === 1, 'a new device is asked for the club passcode');
+    ok(await u.pg.locator('#f_steps').count() === 0, 'and cannot log anything until it is entered');
+
+    await u.pg.fill('#passcode', 'the-wrong-one');
+    await u.pg.click('#unlockBtn');
+    await u.pg.waitForTimeout(1200);
+    ok(await u.pg.locator('#unlockError:not([hidden])').count() === 1, 'a wrong passcode is refused');
+    ok(await u.pg.locator('#passcode').count() === 1, 'and it stays on the passcode screen');
+
+    await u.pg.fill('#passcode', KEY);
+    await u.pg.click('#unlockBtn');
+    await u.pg.waitForTimeout(1500);
+    ok(await u.pg.locator('#passcode').count() === 0, 'the right passcode gets you in');
+    ok(await u.pg.locator('#f_steps').count() === 1, 'and the app is usable');
+
+    const cfg = await u.pg.evaluate(() => JSON.parse(localStorage.getItem('ac.prefs.v1')).sync);
+    ok(cfg.on === true && cfg.mode === 'cookie', 'sync configured itself, with no URL or key typed');
+    ok(!cfg.key, 'the club key is never stored in the page');
+
+    // it syncs for real, and survives a reload without asking again
+    await u.pg.fill('#f_steps', '4242');
+    await u.pg.locator('#f_steps').blur();
+    await u.pg.waitForTimeout(2200);
+    const today2 = new Date();
+    const k2 = `entry:arvind:${today2.getFullYear()}-${String(today2.getMonth()+1).padStart(2,'0')}-${String(today2.getDate()).padStart(2,'0')}`;
+    ok(psql(['-c', `select value->>'steps' from public.club_data where key='${k2}'`], DB) === '4242',
+       'a day logged after unlocking reaches Postgres');
+
+    await u.pg.reload();
+    await u.pg.waitForTimeout(1200);
+    ok(await u.pg.locator('#passcode').count() === 0, 'the passcode is not asked for again');
+    await u.c.close();
+
+    // ---- the day on screen is the day being described ----
+    const { c, pg } = await fresh(PORT);
+    await pg.fill('#passcode', KEY);
+    await pg.click('#unlockBtn');
+    await pg.waitForTimeout(1200);
+
+    const heroToday = await pg.textContent('.hero');
+    ok(/Morning|Afternoon|Evening/.test(heroToday), 'today greets you by time of day');
+
+    const days = await pg.$$('.daybtn:not(.is-sel)');
+    await days[days.length - 1].click();          // yesterday
+    await pg.waitForTimeout(300);
+    const heroPast = await pg.textContent('.hero');
+    ok(!/Morning,|Afternoon,|Evening,/.test(heroPast),
+       'a past day drops the time-of-day greeting');
+    ok(/catching up as Arvind/.test(heroPast), 'and says whose day you are filling in');
+    ok(!/You logged today/.test(heroPast),
+       'the nudge stops claiming things about today while you edit another day');
+    await c.close();
 
     // ---- the database is never exposed to the browser ----
     const leaked = await B.page.evaluate(async () => {

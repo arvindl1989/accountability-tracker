@@ -77,9 +77,13 @@ using `DATABASE_URL`, which stays server-side where a password belongs.
    switched off, so the server is never unintentionally open.
 3. Deploy. On boot the server applies `supabase/schema.sql` itself — no SQL
    editor, no migration step.
-4. Open the app, go to **Settings → Shared board**. It will tell you the site is
-   its own club server; tap **Use this server**, paste your `CLUB_KEY`, and
-   **Turn on & sync**.
+4. Open the app. It asks for the club passcode once — that's your `CLUB_KEY` —
+   and from then on that device syncs on its own. No URL to type, no key to
+   paste into Settings, nothing to re-enter.
+
+The passcode is exchanged for an HttpOnly cookie, so the key never lives in the
+page's JavaScript and never has to be typed again. Non-browser clients can still
+use `CLUB_KEY` as an `apikey` header.
 
 Nothing else to sign up for. The anon-key trade-off from the Supabase route
 disappears too, because there is no anon key — just `CLUB_KEY`, which you choose
@@ -207,6 +211,9 @@ button.
 Signing out only forgets who you are on that device. **Every logged day stays
 exactly where it is** — the data belongs to the club, not to the browser.
 
+The passcode is the club's; the login screen is yours. One says this device may
+talk to the server, the other says which of you is logging.
+
 **Personal links.** Settings gives each of you a link ending `?me=arvind`,
 `?me=abhinandh` or `?me=sai`. Opening yours signs you straight in, which is the
 quick way to set up a new phone. Add *your* link to your home screen and the
@@ -318,7 +325,7 @@ both the light and dark surfaces, so nobody's line disappears.
 npm install && npm test   # drives the real page in a headless browser
 ```
 
-132 checks across six suites: the UI, sign-in / sign-out and personal links, the
+145 checks across six suites: the UI, sign-in / sign-out and personal links, the
 WhatsApp share text, a two-device sync test, the connection diagnostic against
 each way the shared board fails, and an end-to-end run of the real `server.js`
 against a real Postgres with two browsers talking to it.

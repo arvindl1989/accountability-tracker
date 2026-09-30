@@ -14,6 +14,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { Pool } = require('pg');
 
 const PORT = process.env.PORT || 8080;
@@ -95,11 +96,40 @@ function json(res, code, obj) {
   });
 }
 
+/* --------------------------------------------------------------- unlocking */
+/* A browser should not have to carry the club key around in JavaScript. Enter
+ * it once, get an HttpOnly cookie, and that device is authorised from then on.
+ * The cookie holds a hash of the key, so it is useless for anything else and
+ * cannot be read back out of the browser by script. */
+const SESSION_COOKIE = 'club_session';
+function clubToken() {
+  return crypto.createHash('sha256').update('club-session:' + CLUB_KEY).digest('hex');
+}
+function cookies(req) {
+  const out = {};
+  String(req.headers.cookie || '').split(';').forEach(part => {
+    const i = part.indexOf('=');
+    if (i > 0) out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+  });
+  return out;
+}
+function sameSecret(a, b) {
+  const x = Buffer.from(String(a)), y = Buffer.from(String(b));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+}
+function unlocked(req) {
+  if (!CLUB_KEY) return false;
+  const c = cookies(req)[SESSION_COOKIE];
+  return !!c && sameSecret(c, clubToken());
+}
+
 /* --------------------------------------------------------------------- api */
 function authorised(req) {
+  if (!CLUB_KEY) return false;
+  if (unlocked(req)) return true;                       // this browser, already let in
   const given = req.headers.apikey ||
     String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  return CLUB_KEY && given === CLUB_KEY;
+  return !!given && sameSecret(given, CLUB_KEY);        // anything else still needs the key
 }
 
 async function readAll(res) {
@@ -178,12 +208,39 @@ const server = http.createServer((req, res) => {
 
   if (req.method === 'OPTIONS') return json(res, 204, null);
 
+  if (p === '/rest/v1/unlock' && req.method === 'POST') {
+    if (!CLUB_KEY) return json(res, 503, { message: 'This server has no CLUB_KEY set.' });
+    let body = '';
+    req.on('data', c => { body += c; if (body.length > 4096) req.destroy(); });
+    req.on('end', () => {
+      let given = '';
+      try { given = (JSON.parse(body) || {}).key || ''; } catch (e) {}
+      if (!sameSecret(given, CLUB_KEY)) {
+        // a small pause, so guessing is not free
+        return setTimeout(() => json(res, 401, { message: 'That is not the club passcode.' }), 500);
+      }
+      const https = req.headers['x-forwarded-proto'] === 'https';
+      res.setHeader('Set-Cookie', SESSION_COOKIE + '=' + clubToken() +
+        '; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000' + (https ? '; Secure' : ''));
+      json(res, 200, { unlocked: true });
+    });
+    return;
+  }
+
+  if (p === '/rest/v1/lock' && req.method === 'POST') {
+    res.setHeader('Set-Cookie', SESSION_COOKIE + '=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
+    return json(res, 200, { unlocked: false });
+  }
+
   if (p === '/rest/v1/health') {
     // Actually asks the database, rather than reporting that a URL was set.
     // Open this in a browser to see exactly which part is not working.
+    const isUnlocked = unlocked(req);
     return checkHealth(authorised(req))
-      .then(function (h) { json(res, 200, h); })
-      .catch(function (e) { json(res, 200, { club: true, database: false, detail: e.message }); });
+      .then(function (h) { h.unlocked = isUnlocked; json(res, 200, h); })
+      .catch(function (e) {
+        json(res, 200, { club: true, database: false, unlocked: isUnlocked, detail: e.message });
+      });
   }
   if (!pool) {
     return json(res, 503, { message: 'No DATABASE_URL is set on this server, so there is nowhere to store anything.' });
