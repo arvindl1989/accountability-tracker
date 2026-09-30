@@ -454,3 +454,18 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
 .report-line span:last-child{word-break:break-word}
 .report-hint{margin:11px 0 0;padding-top:11px;border-top:1px solid var(--line);
   font-size:13px;line-height:1.55;color:var(--text)}
+
+/* ---------- shared-board banner ---------- */
+.banner{
+  display:flex;align-items:center;gap:13px;flex-wrap:wrap;
+  background:color-mix(in srgb,var(--warn) 12%,var(--bg-elev));
+  border:1px solid color-mix(in srgb,var(--warn) 38%,transparent);
+  border-radius:var(--radius);padding:14px 16px;
+}
+.banner-mark{
+  width:24px;height:24px;flex:0 0 auto;border-radius:50%;display:grid;place-items:center;
+  background:var(--warn);color:#0b0f14;font-weight:800;font-size:14px;
+}
+.banner-text{flex:1;min-width:200px;font-size:13.5px;line-height:1.5;color:var(--text)}
+.banner .btn{padding:9px 15px;font-size:13px}
+@media (max-width:520px){.banner .btn{width:100%}}

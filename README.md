@@ -113,6 +113,13 @@ something. The newest write wins.
 
 ### Checking it works
 
+The app says so itself. When the site is its own club server and something is
+wrong, a banner on **Today** names it: no database attached, no `CLUB_KEY` set,
+or the shared board simply not switched on for this device. No banner means
+either everything is fine or the site is on static hosting.
+
+
+
 Two places tell you, and both name the actual problem:
 
 **The deploy log.** Every boot prints a summary:
@@ -311,7 +318,7 @@ both the light and dark surfaces, so nobody's line disappears.
 npm install && npm test   # drives the real page in a headless browser
 ```
 
-124 checks across six suites: the UI, sign-in / sign-out and personal links, the
+130 checks across six suites: the UI, sign-in / sign-out and personal links, the
 WhatsApp share text, a two-device sync test, the connection diagnostic against
 each way the shared board fails, and an end-to-end run of the real `server.js`
 against a real Postgres with two browsers talking to it.

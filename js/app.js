@@ -120,6 +120,8 @@
         '<div id="heroNudge">' + nudgeHTML() + '</div>' +
       '</section>' +
 
+      '<div id="syncBanner"></div>' +
+
       '<div class="datestrip" id="dateStrip">' + dateStripHTML() + '</div>' +
 
       '<section class="card">' +
@@ -696,6 +698,7 @@
     drawCharts();
     scrollStripToSelection();
     if (ui.tab === 'settings') offerLocalServer();
+    if (ui.tab === 'today') showSyncBanner();
     window.scrollTo({ top: 0, behavior: 'instant' in document.body.style ? 'instant' : 'auto' });
   }
 
@@ -863,6 +866,7 @@
 
     if (hit('#syncSave')) { saveSync(); return; }
     if (hit('#syncTest')) { runDiagnostic(); return; }
+    if (hit('#bannerGo')) { ui.tab = 'settings'; render(); return; }
     if (hit('#useLocal')) {
       el('syncUrl').value = location.origin;
       el('syncKey').focus();
@@ -935,6 +939,38 @@
     }).catch(function (err) {
       renderSyncStatus('err', 'Sync error');
       alert(err.message);
+    });
+  }
+
+  /* Silence is the worst answer to "why isn't my data saved". If the site is its
+   * own club server, it already knows what is wrong; say so on the screen the
+   * person is actually looking at, rather than only in Settings. */
+  function showSyncBanner() {
+    Sync.detectLocal().then(function (info) {
+      var box = el('syncBanner');
+      if (!box || !info) return;                 // not a club server: nothing to add
+
+      var msg = null, cta = true;
+      if (!info.database) {
+        msg = 'This site can\'t reach its database, so nothing is being stored beyond ' +
+              'this device. ' + (info.configured ? 'The database is unreachable.' : 'No database is attached to it.');
+        cta = false;
+      } else if (!info.locked) {
+        msg = 'This site has a database but no club key, so its shared board is switched ' +
+              'off. Whoever runs it needs to set CLUB_KEY.';
+        cta = false;
+      } else if (!Sync.enabled()) {
+        msg = 'Your days are saved on this device only. This site can share them with ' +
+              'everyone — switch the shared board on.';
+      } else {
+        return;                                   // configured and healthy
+      }
+
+      box.innerHTML = '<div class="banner">' +
+        '<span class="banner-mark" aria-hidden="true">!</span>' +
+        '<span class="banner-text">' + esc(msg) + '</span>' +
+        (cta ? '<button class="btn btn-primary" id="bannerGo">Set it up</button>' : '') +
+      '</div>';
     });
   }
 

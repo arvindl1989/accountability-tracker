@@ -54,6 +54,22 @@ function waitFor(port, tries = 80) {
     const APP = `http://127.0.0.1:${PORT}/index.html`;
     const browser = await chromium.launch();
 
+    // helpers used by several of the checks below
+    const bootWith = (env, port) => new Promise(resolve => {
+      const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
+        env: Object.assign({}, process.env, { PORT: String(port) }, env), stdio: 'ignore'
+      });
+      waitFor(port).then(() => resolve(child)).catch(() => resolve(child));
+    });
+    const health = port => new Promise((resolve, reject) => {
+      http.get({ host: '127.0.0.1', port, path: '/rest/v1/health' }, res => {
+        let b = ''; res.on('data', c => b += c);
+        res.on('end', () => { try { resolve(JSON.parse(b)); } catch (e) { reject(e); } });
+      }).on('error', reject);
+    });
+    const DB_URL = `postgresql://postgres@localhost/${DB}?host=${PGHOST}&port=${PGPORT}`;
+
+
     const open = async (who) => {
       const ctx = await browser.newContext();
       const page = await ctx.newPage();
@@ -97,6 +113,39 @@ function waitFor(port, tries = 80) {
     const rep = await B.page.textContent('#syncReport');
     ok(/Read back/.test(rep) && !/✕/.test(rep), 'Test connection reports a clean round trip');
 
+    // ---- the banner names whatever is actually wrong ----
+    const bannerFor = async (port, prefs) => {
+      const c = await browser.newContext();
+      const pg = await c.newPage();
+      await pg.addInitScript(p => localStorage.setItem('ac.prefs.v1', JSON.stringify(p)), prefs);
+      await pg.goto(`http://127.0.0.1:${port}/index.html`);
+      await pg.waitForTimeout(1500);
+      const t = await pg.textContent('#syncBanner');
+      await c.close();
+      return t.trim();
+    };
+
+    const signedInNoSync = { me: 'arvind', theme: 'dark' };
+    let b = await bannerFor(PORT, signedInNoSync);
+    ok(/saved on this device only/i.test(b), 'sync off: the banner says data is device-only');
+    ok(/switch the shared board on/i.test(b), 'and points at the fix');
+
+    b = await bannerFor(PORT, { me: 'arvind', theme: 'dark',
+      sync: { url: `http://127.0.0.1:${PORT}`, key: KEY, on: true } });
+    ok(b === '', 'sync on and healthy: no banner at all');
+
+    const noKeySrv = await bootWith({ CLUB_KEY: '', DATABASE_URL: DB_URL }, 8407);
+    b = await bannerFor(8407, signedInNoSync);
+    ok(/no club key/i.test(b) && /CLUB_KEY/.test(b),
+       'server missing CLUB_KEY: the app says so without anyone reading a log');
+    noKeySrv.kill();
+
+    const noDbSrv = await bootWith({ CLUB_KEY: KEY, DATABASE_URL: '' }, 8408);
+    b = await bannerFor(8408, signedInNoSync);
+    ok(/can't reach its database|cannot reach its database/i.test(b),
+       'server with no database: the app says that instead');
+    noDbSrv.kill();
+
     // ---- the database is never exposed to the browser ----
     const leaked = await B.page.evaluate(async () => {
       const paths = ['/server.js', '/package.json', '/supabase/schema.sql', '/.env'];
@@ -113,19 +162,6 @@ function waitFor(port, tries = 80) {
     await browser.close();
 
     // ---- health tells the truth about each way this is misconfigured ----
-    const bootWith = (env, port) => new Promise(resolve => {
-      const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
-        env: Object.assign({}, process.env, { PORT: String(port) }, env), stdio: 'ignore'
-      });
-      waitFor(port).then(() => resolve(child)).catch(() => resolve(child));
-    });
-    const health = port => new Promise((resolve, reject) => {
-      http.get({ host: '127.0.0.1', port, path: '/rest/v1/health' }, res => {
-        let b = ''; res.on('data', c => b += c);
-        res.on('end', () => { try { resolve(JSON.parse(b)); } catch (e) { reject(e); } });
-      }).on('error', reject);
-    });
-    const DB_URL = `postgresql://postgres@localhost/${DB}?host=${PGHOST}&port=${PGPORT}`;
 
     const noDb = await bootWith({ CLUB_KEY: KEY, DATABASE_URL: '' }, 8403);
     let h = await health(8403);
