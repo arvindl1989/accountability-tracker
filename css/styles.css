@@ -349,6 +349,8 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
   .topbar{position:static;backdrop-filter:none}
   .topbar-inner{height:auto;flex-wrap:wrap;padding-top:10px;padding-bottom:10px;gap:10px}
   .topbar-right{width:100%;gap:8px}
+  /* signed out there is no chip, so the theme button should not claim a row */
+  .is-signed-out .topbar-right{width:auto}
   .whoami{flex:1;justify-content:space-between}
   .who-btn{flex:1;text-align:center;padding:7px 4px}
   .icon-btn{flex:0 0 auto}
@@ -392,40 +394,48 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
   .wa-pair .btn-wa{flex:1;justify-content:center}
 }
 
-/* ---------- first-run identity ---------- */
-.setup{
-  max-width:520px;margin:6vh auto 0;text-align:center;
+/* ---------- login ---------- */
+.login{
+  max-width:440px;margin:5vh auto 0;text-align:center;
   background:var(--bg-elev);border:1px solid var(--line);
-  border-radius:var(--radius);padding:32px 24px;box-shadow:var(--shadow);
+  border-radius:var(--radius);padding:34px 26px 26px;box-shadow:var(--shadow);
 }
-.setup h1{font-size:22px;margin-bottom:8px}
-.setup p{color:var(--text-dim);font-size:14px;margin:0 auto 24px;max-width:40ch;line-height:1.55}
-.setup-people{display:flex;flex-direction:column;gap:10px}
-.setup-person{
-  display:flex;align-items:center;gap:13px;cursor:pointer;text-align:left;
+.login-mark svg{width:46px;height:46px;display:block;margin:0 auto 18px}
+.login-mark rect{fill:var(--accent)}
+.login-mark path{stroke:#fff}
+.login h1{font-size:20px;margin-bottom:9px;letter-spacing:-.015em}
+.login p{color:var(--text-dim);font-size:13.5px;margin:0 auto 22px;max-width:36ch;line-height:1.55}
+.login-people{display:flex;flex-direction:column;gap:9px}
+.login-person{
+  display:flex;align-items:center;gap:13px;cursor:pointer;text-align:left;width:100%;
   background:var(--bg-elev-2);border:1px solid var(--line);border-left:3px solid var(--pc);
   border-radius:var(--radius-sm);padding:13px 16px;font-size:16px;font-weight:700;
   color:var(--text);transition:.15s;
 }
-.setup-person:hover{border-color:var(--pc);background:color-mix(in srgb,var(--pc) 12%,var(--bg-elev-2))}
-.setup-person .avatar{background:var(--pc)}
-.setup-name{flex:1}
+.login-person:hover{border-color:var(--pc);background:color-mix(in srgb,var(--pc) 13%,var(--bg-elev-2))}
+.login-person:focus-visible{outline:2px solid var(--pc);outline-offset:2px}
+.login-person .avatar{background:var(--pc)}
+.login-name{flex:1}
+.login-go{color:var(--text-faint);font-size:17px;transition:transform .15s,color .15s}
+.login-person:hover .login-go{color:var(--pc);transform:translateX(3px)}
+.login-remember{
+  display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;
+  margin-top:20px;font-size:12.5px;font-weight:500;color:var(--text-dim);
+}
+.login-remember input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer}
 
 /* ---------- identity in settings ---------- */
-.who-pick{display:flex;gap:8px;flex-wrap:wrap}
-.who-opt{
-  display:flex;align-items:center;gap:9px;cursor:pointer;flex:1;min-width:130px;
-  background:var(--bg-elev-2);border:1px solid var(--line);border-radius:var(--radius-sm);
-  padding:10px 13px;font-size:14px;font-weight:600;color:var(--text-dim);transition:.15s;
+.signed-in{display:flex;align-items:center;gap:13px}
+.signed-in .avatar{width:38px;height:38px;font-size:13px;background:var(--pc)}
+.signed-who{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.signed-who b{font-size:15px}
+.signed-who .sd{font-size:12px}
+@media (max-width:420px){
+  .signed-in{flex-wrap:wrap}
+  .signed-in .btn{width:100%}
 }
-.who-opt:hover{color:var(--text);border-color:var(--pc)}
-.who-opt .avatar{width:28px;height:28px;font-size:11px;background:var(--pc);opacity:.55}
-.who-opt.is-me{color:var(--text);border-color:var(--pc);
-  background:color-mix(in srgb,var(--pc) 13%,var(--bg-elev-2))}
-.who-opt.is-me .avatar{opacity:1}
 
 .linkrows{margin-top:18px;padding-top:16px;border-top:1px solid var(--line-soft)}
 .linkrow{display:flex;align-items:center;gap:10px;padding:5px 0}
 .linkrow code{font-family:var(--mono);font-size:12.5px;color:var(--text-dim);flex:1}
 .linkrow .btn-copy{padding:7px 11px;font-size:14px}
-@media (max-width:520px){.who-opt{min-width:0;flex:1 1 100%}}

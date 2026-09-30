@@ -63,28 +63,36 @@ one-time sign-in.
 | **Today** | Log the day — steps, weight, active minutes, workout, habit chips, a note. Scroll the date strip to fix up a day you missed. Below it, what all three of you did today. |
 | **Board** | The weekly leaderboard, a 4-week show-up grid, and 30-day consistency. Arrow back through past weeks. |
 | **Trends** | Daily steps or active minutes as grouped bars against your goal, and everyone's weight over 30 days / 90 days / a year. Every chart has a table view. |
-| **Settings** | Who you are, per-person goals, kg/lb, theme, sharing, backup. |
+| **Settings** | Who you're signed in as, per-person goals, kg/lb, theme, sharing, backup. |
 
-## Being yourself
+## Signing in
 
-The first time you open the app it asks who you are. Pick once; it's remembered,
-and everything you log from then on is filed against you. The chip in the top
-right shows who that is — tap it to change in Settings.
+Opening the app shows a login screen: **Select who you are to record your
+data**, and the three of you. Pick yourself and you're in — steps, weight,
+workouts and habits are all filed against whoever is signed in.
+
+**Stay signed in on this device** is ticked by default, so you do this once per
+phone. Untick it and you're signed in for that browser session only; close it
+and the login screen is back. Settings shows who you are and has a **Sign out**
+button.
+
+Signing out only forgets who you are on that device. **Every logged day stays
+exactly where it is** — the data belongs to the club, not to the browser.
 
 **Personal links.** Settings gives each of you a link ending `?me=arvind`,
-`?me=abhinandh` or `?me=sai`. Open your own and the app knows you without
-anyone picking from a list, which is the easy way to set up a new phone or
-recover after a browser clears its storage. Add *your* link to your home screen
-and the icon opens as you.
+`?me=abhinandh` or `?me=sai`. Opening yours signs you straight in, which is the
+quick way to set up a new phone. Add *your* link to your home screen and the
+icon opens as you. The link signs you in once and then drops out of the address
+bar, so a URL copied from there afterwards won't hand your identity to whoever
+you send it to. An unrecognised `?me=` falls back to the login screen rather
+than silently picking someone.
 
-The link identifies you once and then drops out of the address bar, so a URL
-copied from there afterwards won't hand your identity to whoever you send it to.
-
-Switching is deliberate rather than one tap from every screen, which is the
-point — but it isn't security. Anyone with the app can still choose to be
-anyone, and anyone with the anon key can write to the table. If you want people
-actually unable to edit each other's days, that's Supabase magic-link auth with
-policies keyed on `auth.uid()`, and it's a bigger job.
+**This is selection, not authentication.** There is no password, so anyone with
+the app can sign in as anyone, and anyone with the anon key can still write to
+the table. It stops accidents, not people. If you want the three of you
+genuinely unable to edit each other's days, that's Supabase magic-link auth with
+policies keyed on `auth.uid()` — a bigger job, and a clean one now that identity
+is a single well-defined thing in the code.
 
 ## How the points work
 
@@ -181,7 +189,7 @@ both the light and dark surfaces, so nobody's line disappears.
 npm install && npm test   # drives the real page in a headless browser
 ```
 
-84 checks across four suites: the UI, first-run identity and personal links, the
+93 checks across four suites: the UI, sign-in / sign-out and personal links, the
 WhatsApp share text, and a two-device sync test that runs both browsers against
 a stand-in for Supabase's REST API.
 That mock keeps rows in memory by default so the suite runs anywhere. To exercise

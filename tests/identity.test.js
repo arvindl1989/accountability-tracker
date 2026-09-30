@@ -22,32 +22,69 @@ async function fresh(browser, url) {
 (async () => {
   const browser = await chromium.launch();
 
-  // ---------- a brand-new device asks who you are ----------
+  // ---------- a brand-new device shows the login screen ----------
   let { ctx, page } = await fresh(browser);
-  ok(await page.locator('.setup').count() === 1, 'a new device shows the setup screen');
-  ok(await page.locator('#tabs').isHidden(), 'tabs are hidden until you say who you are');
+  ok(await page.locator('.login').count() === 1, 'a new device shows the login screen');
+  ok((await page.textContent('.login h1')).includes('Select who you are'), 'it asks you to select who you are');
+  ok(await page.locator('#tabs').isHidden(), 'tabs are hidden until you sign in');
   ok(await page.locator('#whoChip').isHidden(), 'the identity chip is hidden too');
-  ok(await page.locator('.setup-person').count() === 3, 'all three are offered');
-  ok(await page.locator('#f_steps').count() === 0, 'nothing is loggable before choosing');
+  ok(await page.locator('.login-person').count() === 3, 'all three are offered');
+  ok(await page.locator('#f_steps').count() === 0, 'nothing is loggable before signing in');
+  ok(await page.isChecked('#rememberMe'), 'stay signed in is on by default');
 
-  await page.click('.setup-person[data-who="abhinandh"]');
+  await page.click('.login-person[data-who="abhinandh"]');
   await page.waitForTimeout(300);
-  ok(await page.locator('.setup').count() === 0, 'choosing dismisses the setup screen');
+  ok(await page.locator('.login').count() === 0, 'signing in dismisses the login screen');
   ok((await page.textContent('#whoChip')).includes('Abhinandh'), 'the chip names you');
   ok((await page.textContent('.hero')).includes('Abhinandh'), 'the greeting is yours');
   ok(await page.evaluate(() => JSON.parse(localStorage.getItem('ac.prefs.v1')).me) === 'abhinandh',
-     'the choice is persisted');
+     'staying signed in persists the choice');
 
   // ---------- and it sticks ----------
   await page.reload();
   await page.waitForTimeout(350);
-  ok(await page.locator('.setup').count() === 0, 'a returning visit does not ask again');
-  ok((await page.textContent('#whoChip')).includes('Abhinandh'), 'you are still you after a reload');
+  ok(await page.locator('.login').count() === 0, 'a returning visit does not ask again');
+  ok((await page.textContent('#whoChip')).includes('Abhinandh'), 'you are still signed in after a reload');
+
+  // ---------- sign out returns you to the login screen, data intact ----------
+  const daysBefore = await page.evaluate(() =>
+    Object.keys(JSON.parse(localStorage.getItem('ac.club.v1')).records).length);
+  await page.click('.tab[data-view="settings"]');
+  await page.waitForTimeout(200);
+  ok((await page.textContent('.signed-in')).includes('Abhinandh'), 'Settings shows who is signed in');
+  await page.click('#signOutBtn');
+  await page.waitForTimeout(300);
+  ok(await page.locator('.login').count() === 1, 'signing out returns to the login screen');
+  ok(await page.evaluate(() => JSON.parse(localStorage.getItem('ac.prefs.v1')).me) === '',
+     'signing out forgets who you are');
+  ok(await page.evaluate(() =>
+       Object.keys(JSON.parse(localStorage.getItem('ac.club.v1')).records).length) === daysBefore,
+     'signing out keeps every logged day');
   await ctx.close();
+
+  // ---------- unticking "stay signed in" lasts only the session ----------
+  ({ ctx, page } = await fresh(browser));
+  await page.uncheck('#rememberMe');
+  await page.click('.login-person[data-who="sai"]');
+  await page.waitForTimeout(300);
+  ok((await page.textContent('#whoChip')).includes('Sai'), 'you are signed in for now');
+  ok(await page.evaluate(() => JSON.parse(localStorage.getItem('ac.prefs.v1')).me) === '',
+     'nothing is remembered on disk');
+  await page.reload();
+  await page.waitForTimeout(350);
+  ok(await page.locator('.login').count() === 0, 'a reload keeps the same session signed in');
+  const store = await ctx.storageState();
+  await ctx.close();
+  const ctx3 = await browser.newContext({ storageState: { cookies: [], origins: store.origins } });
+  const p3 = await ctx3.newPage();
+  await p3.goto(APP);
+  await p3.waitForTimeout(350);
+  ok(await p3.locator('.login').count() === 1, 'a new session asks again');
+  await ctx3.close();
 
   // ---------- a personal link identifies you with no picking ----------
   ({ ctx, page } = await fresh(browser, APP + '?me=sai'));
-  ok(await page.locator('.setup').count() === 0, '?me= skips the setup screen');
+  ok(await page.locator('.login').count() === 0, '?me= signs you straight in');
   ok((await page.textContent('#whoChip')).includes('Sai'), '?me= sets the right person');
   ok(!page.url().includes('me='), 'the query is stripped so a copied URL is not your identity');
   ok(await page.evaluate(() => JSON.parse(localStorage.getItem('ac.prefs.v1')).me) === 'sai',
@@ -56,7 +93,7 @@ async function fresh(browser, url) {
 
   // ---------- a bogus link does not silently pick someone ----------
   ({ ctx, page } = await fresh(browser, APP + '?me=nobody'));
-  ok(await page.locator('.setup').count() === 1, 'an unknown ?me= falls back to asking');
+  ok(await page.locator('.login').count() === 1, 'an unknown ?me= falls back to the login screen');
   await ctx.close();
 
   // ---------- the chip routes to Settings; switching is deliberate ----------
@@ -65,11 +102,7 @@ async function fresh(browser, url) {
   await page.click('#whoChip');
   await page.waitForTimeout(250);
   ok(await page.locator('.tab[data-view="settings"].is-active').count() === 1, 'the chip opens Settings');
-  ok(await page.locator('.who-opt[data-who="arvind"].is-me').count() === 1, 'Settings marks who you are');
-
-  await page.click('.who-opt[data-who="sai"]');
-  await page.waitForTimeout(250);
-  ok((await page.textContent('#whoChip')).includes('Sai'), 'switching from Settings works');
+  ok((await page.textContent('.signed-in')).includes('Arvind'), 'Settings names who is signed in');
 
   // ---------- the links are offered, and copy the right thing ----------
   ok(await page.locator('[data-copylink]').count() === 3, 'a link is offered for each person');

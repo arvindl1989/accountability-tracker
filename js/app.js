@@ -72,18 +72,26 @@
       '<span class="whochip-name">' + esc(me.name) + '</span>';
   }
 
-  /* Anyone landing without an identity answers one question before anything
-   * else. A wrong guess here files someone else's run against you. */
-  function viewSetup() {
-    return '<section class="setup">' +
-      '<h1>Who\'s using this device?</h1>' +
-      '<p>Pick yourself once. The app remembers, and everything after this is ' +
-      'logged as you. You can change it in Settings.</p>' +
-      '<div class="setup-people">' + Store.people().map(function (p) {
-        return '<button class="setup-person" style="--pc:' + p.color + '" data-who="' + p.id + '">' +
+  /* Nobody gets to the app without saying who they are. A wrong answer here
+   * files someone else's run against you, so it is asked before anything else
+   * renders. */
+  function viewLogin() {
+    return '<section class="login">' +
+      '<span class="login-mark" aria-hidden="true">' +
+        '<svg viewBox="0 0 100 100"><rect width="100" height="100" rx="24"/>' +
+        '<path d="M28 62 L44 44 L56 54 L74 32" fill="none" stroke-width="9" ' +
+        'stroke-linecap="round" stroke-linejoin="round"/></svg></span>' +
+      '<h1>Select who you are to record your data</h1>' +
+      '<p>Steps, weight, workouts and habits are all filed against whoever you pick.</p>' +
+      '<div class="login-people">' + Store.people().map(function (p) {
+        return '<button class="login-person" style="--pc:' + p.color + '" data-who="' + p.id + '">' +
           '<span class="avatar">' + esc(p.initials) + '</span>' +
-          '<span class="setup-name">' + esc(p.name) + '</span></button>';
+          '<span class="login-name">' + esc(p.name) + '</span>' +
+          '<span class="login-go" aria-hidden="true">→</span></button>';
       }).join('') + '</div>' +
+      '<label class="login-remember">' +
+        '<input type="checkbox" id="rememberMe" checked> Stay signed in on this device' +
+      '</label>' +
     '</section>';
   }
   function renderSyncStatus(state, text) {
@@ -587,11 +595,16 @@
     return '' +
       '<section class="card">' +
         '<div class="card-head"><h2>You</h2><span class="sub">Everything you log is filed against this</span></div>' +
-        '<div class="who-pick">' + Store.people().map(function (p) {
-          return '<button class="who-opt' + (p.id === me.id ? ' is-me' : '') + '" style="--pc:' + p.color +
-            '" data-who="' + p.id + '"><span class="avatar">' + esc(p.initials) + '</span>' +
-            esc(p.name) + '</button>';
-        }).join('') + '</div>' +
+        '<div class="signed-in" style="--pc:' + me.color + '">' +
+          '<span class="avatar">' + esc(me.initials) + '</span>' +
+          '<span class="signed-who"><b>' + esc(me.name) + '</b>' +
+            '<span class="sd">' + (Store.isRemembered()
+              ? 'Signed in on this device'
+              : 'Signed in for this session only') + '</span></span>' +
+          '<button class="btn btn-ghost" id="signOutBtn">Sign out</button>' +
+        '</div>' +
+        '<p class="sd" style="margin:12px 0 0">Signing out only forgets who you are here. ' +
+        'Every logged day stays exactly where it is.</p>' +
         personalLinks() +
       '</section>' +
 
@@ -665,8 +678,9 @@
     renderSyncStatus();
     var known = Store.hasIdentity();
     document.getElementById('tabs').hidden = !known;
+    document.documentElement.classList.toggle('is-signed-out', !known);
     if (!known) {
-      view.innerHTML = viewSetup();
+      view.innerHTML = viewLogin();
       return;
     }
     document.querySelectorAll('.tab').forEach(function (t) {
@@ -751,10 +765,17 @@
     var n;
 
     if ((n = hit('[data-who]'))) {
-      var first = !Store.hasIdentity();
       commit(false);
-      Store.setMe(n.dataset.who);                 // emits, so render() follows
-      if (first) { ui.tab = 'today'; render(); toast('Hello, ' + Store.me().name); }
+      var remember = !el('rememberMe') || el('rememberMe').checked;
+      Store.signIn(n.dataset.who, remember);      // emits, so render() follows
+      ui.tab = 'today';
+      render();
+      toast('Hello, ' + Store.me().name);
+      return;
+    }
+    if (hit('#signOutBtn')) {
+      commit(false);
+      Store.signOut();                            // emits; lands on the login screen
       return;
     }
     if ((n = hit('[data-copylink]'))) {
@@ -921,8 +942,7 @@
    * identity to whoever you send it to. localStorage carries it from here. */
   function adoptIdentityFromUrl() {
     var m = /[?&]me=([a-z0-9_-]+)/i.exec(location.search);
-    if (m && Store.knows(m[1].toLowerCase())) Store.prefs.me = m[1].toLowerCase();
-    Store.savePrefs();
+    if (m && Store.knows(m[1].toLowerCase())) Store.signIn(m[1].toLowerCase(), true);
     if (m && location.search && window.history && history.replaceState) {
       history.replaceState(null, '', location.pathname + location.hash);
     }

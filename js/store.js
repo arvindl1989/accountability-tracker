@@ -105,9 +105,33 @@ var Store = (function () {
     for (var i = 0; i < PEOPLE.length; i++) if (PEOPLE[i].id === id) return PEOPLE[i];
     return PEOPLE[0];
   }
-  function me() { return person(prefs.me); }
-  function setMe(id) { prefs.me = person(id).id; savePrefs(); emit(); }
-  function hasIdentity() { return !!prefs.me && knows(prefs.me); }
+  /* Signing in writes to sessionStorage always, and to prefs only when you ask
+   * to be remembered. So "stay signed in" off means this browser session and no
+   * longer — close it and the login screen is back. */
+  var SS_ME = 'ac.session.me';
+  function sessionMe() {
+    try { return sessionStorage.getItem(SS_ME) || ''; } catch (e) { return ''; }
+  }
+  function currentId() { return sessionMe() || prefs.me; }
+  function me() { return person(currentId()); }
+  function hasIdentity() { var id = currentId(); return !!id && knows(id); }
+
+  function signIn(id, remember) {
+    id = person(id).id;
+    try { sessionStorage.setItem(SS_ME, id); } catch (e) {}
+    prefs.me = remember ? id : '';
+    savePrefs();
+    emit();
+  }
+  // Forgets who you are on this device. It never touches the logged days —
+  // those belong to the club, not to the browser.
+  function signOut() {
+    try { sessionStorage.removeItem(SS_ME); } catch (e) {}
+    prefs.me = '';
+    savePrefs();
+    emit();
+  }
+  function isRemembered() { return !!prefs.me; }
   function knows(id) {
     for (var i = 0; i < PEOPLE.length; i++) if (PEOPLE[i].id === id) return true;
     return false;
@@ -291,8 +315,9 @@ var Store = (function () {
     onChange: onChange, emit: emit,
     iso: iso, today: today, shift: shift, parse: parse, rangeBack: rangeBack,
     weekStart: weekStart, daysBetween: daysBetween,
-    people: people, person: person, me: me, setMe: setMe,
-    hasIdentity: hasIdentity, knows: knows,
+    people: people, person: person, me: me,
+    signIn: signIn, signOut: signOut, hasIdentity: hasIdentity,
+    isRemembered: isRemembered, knows: knows,
     entry: entry, saveEntry: saveEntry, clearEntry: clearEntry, isLogged: isLogged, num: num,
     workoutList: workoutList,
     goals: goals, saveGoals: saveGoals, units: units, setUnits: setUnits,

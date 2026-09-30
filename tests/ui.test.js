@@ -10,8 +10,10 @@ const ok = (c, m) => { console.log((c ? '  PASS  ' : '  FAIL  ') + m); if (!c) f
 async function switchTo(page, who) {
   await page.click('.tab[data-view="settings"]');
   await page.waitForTimeout(120);
-  await page.click(`[data-who="${who}"]`);
-  await page.waitForTimeout(150);
+  await page.click('#signOutBtn');
+  await page.waitForTimeout(200);
+  await page.click(`.login-person[data-who="${who}"]`);
+  await page.waitForTimeout(200);
   await page.click('.tab[data-view="today"]');
   await page.waitForTimeout(150);
 }
