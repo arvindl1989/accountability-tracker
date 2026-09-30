@@ -81,6 +81,35 @@ reason the schema grants no DELETE at all.
 Everyone's edits merge on open, on tab focus, and shortly after you log
 something. The newest write wins.
 
+### Checking it works
+
+Two places tell you, and both name the actual problem:
+
+**The deploy log.** Every boot prints a summary:
+
+```
+---- accountability club ----
+  ok  DATABASE_URL is set
+  ok  database reachable
+  ok  club_data table present (14 records)
+  ok  CLUB_KEY is set
+      shared board is ready
+-----------------------------
+```
+
+A FAIL on any line is the thing to fix, and the line under it says why.
+
+**`/rest/v1/health`** on the live site — open it in a browser, no key needed:
+
+```json
+{"club":true,"configured":true,"locked":true,"database":true,"schema":true}
+```
+
+`configured` is DATABASE_URL present, `database` is the server actually reaching
+it, `schema` is the table existing, `locked` is CLUB_KEY set. All four true means
+the board is ready. Add your key as an `apikey` header and it also reports how
+many records are stored.
+
 **If nothing is reaching the database**, hit **Test connection** in Settings. It
 walks the same path a real sync takes — reach the server, read, write, read back
 — and names the first thing that fails. The usual answers:
@@ -252,7 +281,7 @@ both the light and dark surfaces, so nobody's line disappears.
 npm install && npm test   # drives the real page in a headless browser
 ```
 
-114 checks across six suites: the UI, sign-in / sign-out and personal links, the
+121 checks across six suites: the UI, sign-in / sign-out and personal links, the
 WhatsApp share text, a two-device sync test, the connection diagnostic against
 each way the shared board fails, and an end-to-end run of the real `server.js`
 against a real Postgres with two browsers talking to it.

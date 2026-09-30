@@ -114,6 +114,29 @@ async function upsert(res, body) {
   }
 }
 
+/* Unauthenticated callers get booleans only — enough to diagnose, nothing worth
+ * knowing. The record count needs the key. */
+async function checkHealth(trusted) {
+  const out = { club: true, configured: !!pool, locked: !!CLUB_KEY, database: false, schema: false };
+  if (!pool) { out.detail = 'No DATABASE_URL on this server.'; return out; }
+  try {
+    await pool.query('select 1');
+    out.database = true;
+  } catch (e) {
+    out.detail = 'Cannot reach the database: ' + e.message;
+    return out;
+  }
+  const { rows } = await pool.query("select to_regclass('public.club_data') is not null as ok");
+  out.schema = rows[0].ok;
+  if (!out.schema) { out.detail = 'Connected, but club_data does not exist — the schema did not apply.'; return out; }
+  if (trusted) {
+    const c = await pool.query('select count(*)::int as n from public.club_data');
+    out.records = c.rows[0].n;
+  }
+  if (!out.locked) out.detail = 'No CLUB_KEY set, so the data API is switched off.';
+  return out;
+}
+
 /* ------------------------------------------------------------------ server */
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
@@ -127,7 +150,11 @@ const server = http.createServer((req, res) => {
   if (req.method === 'OPTIONS') return json(res, 204, null);
 
   if (p === '/rest/v1/health') {
-    return json(res, 200, { club: true, database: !!pool, locked: !!CLUB_KEY });
+    // Actually asks the database, rather than reporting that a URL was set.
+    // Open this in a browser to see exactly which part is not working.
+    return checkHealth(authorised(req))
+      .then(function (h) { json(res, 200, h); })
+      .catch(function (e) { json(res, 200, { club: true, database: false, detail: e.message }); });
   }
   if (!pool) {
     return json(res, 503, { message: 'No DATABASE_URL is set on this server, so there is nowhere to store anything.' });
@@ -156,10 +183,24 @@ async function start() {
   if (pool) {
     try { await migrate(); }
     catch (e) { console.error('schema failed to apply:', e.message); }
-  } else {
-    console.warn('DATABASE_URL is not set — serving the app, but the data API is off.');
   }
-  if (pool && !CLUB_KEY) console.warn('CLUB_KEY is not set — the data API stays off until it is.');
+
+  // Printed on every boot, because Railway's deploy log is the first place
+  // anyone looks when the board is not syncing.
+  const h = await checkHealth(true).catch(e => ({ detail: e.message }));
+  const mark = ok => (ok ? '  ok  ' : ' FAIL ');
+  console.log('---- accountability club ----');
+  console.log(mark(h.configured) + 'DATABASE_URL is set');
+  console.log(mark(h.database) + 'database reachable');
+  console.log(mark(h.schema) + 'club_data table present' +
+    (h.records === undefined ? '' : ` (${h.records} record${h.records === 1 ? '' : 's'})`));
+  console.log(mark(h.locked) + 'CLUB_KEY is set');
+  if (h.detail) console.log('      ' + h.detail);
+  console.log(h.database && h.schema && h.locked
+    ? '      shared board is ready'
+    : '      shared board is OFF — see /rest/v1/health');
+  console.log('-----------------------------');
+
   server.listen(PORT, () => console.log(`listening on ${PORT}`));
 }
 

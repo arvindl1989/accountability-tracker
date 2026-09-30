@@ -111,6 +111,43 @@ function waitFor(port, tries = 80) {
     ok(!/postgresql:\/\//.test(src), 'no connection string appears in the page');
 
     await browser.close();
+
+    // ---- health tells the truth about each way this is misconfigured ----
+    const bootWith = (env, port) => new Promise(resolve => {
+      const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
+        env: Object.assign({}, process.env, { PORT: String(port) }, env), stdio: 'ignore'
+      });
+      waitFor(port).then(() => resolve(child)).catch(() => resolve(child));
+    });
+    const health = port => new Promise((resolve, reject) => {
+      http.get({ host: '127.0.0.1', port, path: '/rest/v1/health' }, res => {
+        let b = ''; res.on('data', c => b += c);
+        res.on('end', () => { try { resolve(JSON.parse(b)); } catch (e) { reject(e); } });
+      }).on('error', reject);
+    });
+    const DB_URL = `postgresql://postgres@localhost/${DB}?host=${PGHOST}&port=${PGPORT}`;
+
+    const noDb = await bootWith({ CLUB_KEY: KEY, DATABASE_URL: '' }, 8403);
+    let h = await health(8403);
+    ok(h.configured === false && h.database === false, 'health reports a missing DATABASE_URL');
+    ok(/No DATABASE_URL/.test(h.detail || ''), 'and says so in words');
+    noDb.kill();
+
+    const badDb = await bootWith({ CLUB_KEY: KEY, DATABASE_URL: 'postgresql://p:p@127.0.0.1:59998/x' }, 8404);
+    h = await health(8404);
+    ok(h.configured === true && h.database === false, 'health reports an unreachable database');
+    ok(/Cannot reach the database/.test(h.detail || ''), 'and names the connection error');
+    badDb.kill();
+
+    const noKey = await bootWith({ CLUB_KEY: '', DATABASE_URL: DB_URL }, 8405);
+    h = await health(8405);
+    ok(h.database === true && h.schema === true && h.locked === false,
+       'health reports a healthy database with no CLUB_KEY');
+    ok(h.records === undefined, 'the record count is withheld without the key');
+    noKey.kill();
+
+    h = await health(PORT);
+    ok(h.database && h.schema && h.locked, 'a correctly set up server reports all clear');
   } catch (e) {
     ok(false, 'unexpected failure: ' + e.message);
   } finally {
