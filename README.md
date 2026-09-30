@@ -170,7 +170,18 @@ That mock keeps rows in memory by default so the suite runs anywhere. To exercis
 applied:
 
 ```sh
-SYNC_TEST_PG=1 PGHOST=/path/to/socket PGPORT=5432 npm test
+./tests/db-fresh.sh                              # throwaway local Postgres, schema applied
+SYNC_TEST_PG=1 PGHOST=/tmp/acdb/sock PGPORT=55432 npm test
+./tests/db-fresh.sh --stop
+```
+
+`db-fresh.sh` also takes a connection string, so you can apply the schema to a
+real database without opening the Supabase editor. It only ever creates; add
+`--reset` if you also want the rows truncated.
+
+```sh
+./tests/db-fresh.sh "$DATABASE_URL"
+./tests/db-fresh.sh "$DATABASE_URL" --reset      # wipes club_data first
 ```
 
 ## Adding a fourth person

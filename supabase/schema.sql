@@ -9,6 +9,10 @@
 --   goals:<person>                that person's step / active / target-weight goals
 --   club                          club-wide settings (kg or lb)
 
+-- Quiet the "does not exist, skipping" notices the idempotent drops emit on a
+-- fresh database. Warnings and errors still show.
+set client_min_messages = warning;
+
 -- ---------------------------------------------------------------- table
 
 create table if not exists public.club_data (
