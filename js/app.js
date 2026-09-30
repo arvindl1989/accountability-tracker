@@ -104,9 +104,11 @@
           field('active', 'Active minutes', 'number', e.active, g.active ? 'goal ' + g.active + ' min' : '', '0') +
           field('weight', 'Weight (' + unitLabel() + ')', 'number', e.weight, g.weight ? 'target ' + g.weight : '', '0.0') +
           '<div class="field wide">' +
-            '<label>Workout</label>' +
+            '<label>Workouts <span class="hint">· pick as many as you did</span></label>' +
             '<div class="chips" id="workoutChips">' + Store.WORKOUTS.map(function (w) {
-              return '<button class="chip pick' + (e.workout === w ? ' on' : '') + '" data-workout="' + esc(w) + '">' + esc(w) + '</button>';
+              var on = e.workout.indexOf(w) !== -1;
+              return '<button class="chip pick' + (on ? ' on' : '') + '" data-workout="' + esc(w) + '" ' +
+                'aria-pressed="' + on + '">' + esc(w) + '</button>';
             }).join('') + '</div>' +
           '</div>' +
           '<div class="field wide">' +
@@ -237,9 +239,9 @@
           '<div class="pc-stat"><b>' + (e.active === null ? '—' : e.active) + '</b><span>min</span></div>' +
           '<div class="pc-stat"><b>' + (e.weight === null ? '—' : fmt(e.weight)) + '</b><span>' + esc(unitLabel()) + '</span></div>' +
         '</div>' +
-        (e.workout || (e.habits && e.habits.length)
+        (e.workout.length || (e.habits && e.habits.length)
           ? '<div class="pc-habits">' +
-              (e.workout ? '<span class="hbadge on">' + esc(e.workout) + '</span>' : '') +
+              e.workout.map(function (w) { return '<span class="hbadge on">' + esc(w) + '</span>'; }).join('') +
               Store.HABITS.map(function (h) {
                 var on = (e.habits || []).indexOf(h.id) !== -1;
                 return on ? '<span class="hbadge on" title="' + esc(h.label) + '">' + h.icon + '</span>' : '';
@@ -706,10 +708,24 @@
 
     if ((n = hit('[data-workout]'))) {
       var d2 = ensureDraft();
+      d2.workout = Store.workoutList(d2.workout);
       var w = n.dataset.workout;
-      d2.workout = d2.workout === w ? '' : w;
+      var at = d2.workout.indexOf(w);
+
+      if (at !== -1) {
+        d2.workout.splice(at, 1);
+      } else if (Store.SOLO_WORKOUTS.indexOf(w) !== -1) {
+        d2.workout = [w];                                  // Rest replaces everything
+      } else {
+        d2.workout = d2.workout.filter(function (x) {       // and anything else clears Rest
+          return Store.SOLO_WORKOUTS.indexOf(x) === -1;
+        }).concat(w);
+      }
+
       view.querySelectorAll('[data-workout]').forEach(function (c) {
-        c.classList.toggle('on', c.dataset.workout === d2.workout);
+        var on = d2.workout.indexOf(c.dataset.workout) !== -1;
+        c.classList.toggle('on', on);
+        c.setAttribute('aria-pressed', on);
       });
       commit(false); return;
     }

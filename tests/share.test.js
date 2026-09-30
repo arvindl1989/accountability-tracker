@@ -31,6 +31,7 @@ const ok = (c, m) => { console.log((c ? '  PASS  ' : '  FAIL  ') + m); if (!c) f
     await page.fill(sel, val); await page.locator(sel).blur();
   }
   await page.click('[data-workout="Run"]');
+  await page.click('[data-workout="Gym"]');
   await page.click('[data-habit="water"]');
   await page.waitForTimeout(200);
   await page.click('#shareDayBtn');
@@ -44,7 +45,7 @@ const ok = (c, m) => { console.log((c ? '  PASS  ' : '  FAIL  ') + m); if (!c) f
   ok(dayText.includes('12,500 steps ✅'), 'includes steps with the goal tick');
   ok(dayText.includes('55 active min ✅'), 'includes active minutes');
   ok(dayText.includes('77.2 kg'), 'includes weight in the right unit');
-  ok(dayText.includes('🏋️ Run'), 'includes the workout');
+  ok(dayText.includes('🏋️ Run + Gym'), 'joins multiple workouts');
   ok(dayText.includes('1/5 habits'), 'includes the habit count');
   ok(dayText.includes('Legs were heavy.'), 'includes the note');
   ok(/\d+\/42 pts/.test(dayText), 'includes the points');

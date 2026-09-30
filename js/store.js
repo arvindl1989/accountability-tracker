@@ -2,7 +2,7 @@
  * Everything lives in one flat record map so local state and cloud sync share
  * a single merge rule: last write wins, compared on `t` (epoch ms).
  *
- *   entry:<person>:<YYYY-MM-DD>  ->  { steps, weight, active, workout, habits[], note }
+ *   entry:<person>:<YYYY-MM-DD>  ->  { steps, weight, active, workout[], habits[], note }
  *   goals:<person>               ->  { steps, active, weight }
  *   club                         ->  { units }
  */
@@ -27,6 +27,8 @@ var Store = (function () {
   ];
 
   var WORKOUTS = ['Gym', 'Run', 'Walk', 'Cycle', 'Swim', 'Sports', 'Yoga', 'Home', 'Rest'];
+  // Picking these clears the rest, and vice versa — "Rest + Gym" is not a day.
+  var SOLO_WORKOUTS = ['Rest'];
 
   var DEFAULT_GOALS = { steps: 10000, active: 30, weight: null };
   var POINTS = { logged: 2, steps: 10, active: 10, weight: 5, habit: 3 };
@@ -106,20 +108,28 @@ var Store = (function () {
 
   /* ---------- entries ---------- */
   function entryKey(pid, date) { return 'entry:' + pid + ':' + date; }
-  function blank() { return { steps: null, weight: null, active: null, workout: '', habits: [], note: '' }; }
+  function blank() { return { steps: null, weight: null, active: null, workout: [], habits: [], note: '' }; }
+
+  // Days logged before workouts became multi-select hold a plain string, and a
+  // friend on a cached build may still send one. Normalise on the way in and
+  // out, so both shapes are always safe to read.
+  function workoutList(v) {
+    if (Array.isArray(v)) return v.filter(function (w) { return typeof w === 'string' && w; });
+    return typeof v === 'string' && v ? [v] : [];
+  }
 
   function entry(pid, date) {
     var e = get(entryKey(pid, date), null);
     if (!e) return blank();
     return {
       steps: num(e.steps), weight: num(e.weight), active: num(e.active),
-      workout: e.workout || '', habits: e.habits || [], note: e.note || ''
+      workout: workoutList(e.workout), habits: e.habits || [], note: e.note || ''
     };
   }
   function saveEntry(pid, date, e) {
     var clean = {
       steps: num(e.steps), weight: num(e.weight), active: num(e.active),
-      workout: e.workout || '', habits: (e.habits || []).slice(), note: (e.note || '').trim()
+      workout: workoutList(e.workout), habits: (e.habits || []).slice(), note: (e.note || '').trim()
     };
     // An emptied day becomes a tombstone (null), never a missing key: sync merges
     // on presence, so an outright delete would just be restored by the next pull
@@ -135,11 +145,11 @@ var Store = (function () {
 
   function isEmpty(e) {
     return e.steps === null && e.weight === null && e.active === null &&
-           !e.workout && (!e.habits || !e.habits.length) && !e.note;
+           !workoutList(e.workout).length && (!e.habits || !e.habits.length) && !e.note;
   }
   function isLogged(e) {
     return e.steps !== null || e.weight !== null || e.active !== null ||
-           !!e.workout || (e.habits && e.habits.length > 0);
+           workoutList(e.workout).length > 0 || (e.habits && e.habits.length > 0);
   }
   function num(v) {
     if (v === '' || v === null || v === undefined) return null;
@@ -269,13 +279,14 @@ var Store = (function () {
   load();
 
   return {
-    PEOPLE: PEOPLE, HABITS: HABITS, WORKOUTS: WORKOUTS, POINTS: POINTS,
+    PEOPLE: PEOPLE, HABITS: HABITS, WORKOUTS: WORKOUTS, SOLO_WORKOUTS: SOLO_WORKOUTS, POINTS: POINTS,
     prefs: prefs, savePrefs: savePrefs, records: function () { return data.records; },
     onChange: onChange, emit: emit,
     iso: iso, today: today, shift: shift, parse: parse, rangeBack: rangeBack,
     weekStart: weekStart, daysBetween: daysBetween,
     people: people, person: person, me: me, setMe: setMe,
     entry: entry, saveEntry: saveEntry, clearEntry: clearEntry, isLogged: isLogged, num: num,
+    workoutList: workoutList,
     goals: goals, saveGoals: saveGoals, units: units, setUnits: setUnits,
     score: score, maxDailyScore: maxDailyScore, streak: streak,
     weekPoints: weekPoints, weekDaysLogged: weekDaysLogged, weekSteps: weekSteps,

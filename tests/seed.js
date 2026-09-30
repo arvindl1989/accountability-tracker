@@ -16,7 +16,10 @@ module.exports = function seed() {
         steps: Math.round(4000 + rnd() * 11000),
         weight: Math.round((base[p] - (44 - i) * 0.02 + (rnd() - 0.5) * 0.6) * 10) / 10,
         active: Math.round(rnd() * 80),
-        workout: workouts[Math.floor(rnd() * workouts.length)],
+        // mostly lists, but leave a few legacy strings so the app keeps proving it reads them
+        workout: rnd() < 0.15
+          ? workouts[Math.floor(rnd() * workouts.length)]
+          : workouts.filter(() => rnd() < 0.25).slice(0, 2),
         habits: habits.filter(() => rnd() < 0.55),
         note: rnd() < 0.2 ? 'Legs were heavy but got it done.' : ''
       }, t: Date.now() - i * 86400000 };

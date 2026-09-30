@@ -38,7 +38,7 @@ var Share = (function () {
     if (e.steps !== null) lines.push('👟 ' + fmt(e.steps) + ' steps' + (e.steps >= g.steps ? ' ✅' : ''));
     if (e.active !== null) lines.push('⚡ ' + fmt(e.active) + ' active min' + (e.active >= g.active ? ' ✅' : ''));
     if (e.weight !== null) lines.push('⚖️ ' + fmt(e.weight) + ' ' + u);
-    if (e.workout) lines.push('🏋️ ' + e.workout);
+    if (e.workout.length) lines.push('🏋️ ' + e.workout.join(' + '));
     if (e.habits && e.habits.length) {
       lines.push('✅ ' + e.habits.length + '/' + Store.HABITS.length + ' habits  ' + habitIcons(e.habits));
     }

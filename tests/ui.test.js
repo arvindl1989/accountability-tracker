@@ -39,6 +39,7 @@ const ok = (c, m) => { console.log((c ? '  PASS  ' : '  FAIL  ') + m); if (!c) f
   await page.locator('#f_steps').blur();
   await page.waitForTimeout(150);
   await page.click('[data-workout="Run"]');
+  await page.click('[data-workout="Gym"]');
   await page.click('[data-habit="water"]');
   await page.click('[data-habit="sleep"]');
   await page.waitForTimeout(150);
@@ -50,13 +51,33 @@ const ok = (c, m) => { console.log((c ? '  PASS  ' : '  FAIL  ') + m); if (!c) f
   }, TODAY);
   ok(rec.steps === 12500 && rec.active === 55 && rec.weight === 77.2,
      'numbers persist to storage (got ' + JSON.stringify([rec.steps, rec.active, rec.weight]) + ')');
-  ok(rec.workout === 'Run', 'workout chip persists');
+  ok(Array.isArray(rec.workout) && rec.workout.length === 2 &&
+     rec.workout.indexOf('Run') !== -1 && rec.workout.indexOf('Gym') !== -1,
+     'two workouts persist together (got ' + JSON.stringify(rec.workout) + ')');
+
+  // picking Rest clears the rest, and picking another clears Rest
+  await page.click('[data-workout="Rest"]');
+  await page.waitForTimeout(150);
+  let w = await page.evaluate(t => JSON.parse(localStorage.getItem('ac.club.v1')).records['entry:arvind:' + t].v.workout, TODAY);
+  ok(w.length === 1 && w[0] === 'Rest', 'Rest replaces the others (got ' + JSON.stringify(w) + ')');
+  await page.click('[data-workout="Gym"]');
+  await page.waitForTimeout(150);
+  w = await page.evaluate(t => JSON.parse(localStorage.getItem('ac.club.v1')).records['entry:arvind:' + t].v.workout, TODAY);
+  ok(w.length === 1 && w[0] === 'Gym', 'a real workout clears Rest (got ' + JSON.stringify(w) + ')');
+  ok(await page.locator('[data-workout="Gym"].on').count() === 1 &&
+     await page.locator('[data-workout="Rest"].on').count() === 0, 'chip states match the data');
+
+  // restore the pair the later assertions expect
+  await page.click('[data-workout="Run"]');
+  await page.waitForTimeout(200);
   ok(rec.habits.includes('water') && rec.habits.includes('sleep'), 'habit chips persist');
   ok(rec.note === 'Felt strong.', 'note persists');
 
   // score: 2 logged + 10 steps + 10 active + 5 weight + 2 habits*3 = 33
   ok((await page.textContent('#dayScore')).startsWith('33 /'), 'day score computes (33)');
-  ok((await page.textContent('#heroStreak')).includes('1 day'), 'streak updates live');
+  const streakText = await page.textContent('#heroStreak');
+  const streakDays = (streakText.match(/(\d+)\s+days?\s+in a row/) || [])[1];
+  ok(Number(streakDays) >= 1, 'logging today starts a streak (got "' + streakText.trim() + '")');
 
   // --- crew card reflects the entry without a reload ---
   const crew = await page.textContent('#todayCrew');
@@ -91,6 +112,25 @@ const ok = (c, m) => { console.log((c ? '  PASS  ' : '  FAIL  ') + m); if (!c) f
   });
   const past = await page.evaluate(d => JSON.parse(localStorage.getItem('ac.club.v1')).records['entry:arvind:' + d].v.steps, edited);
   ok(past === 4321, 'a past day saves against its own date');
+
+  // --- a legacy record (workout as a plain string) still reads ---
+  await page.evaluate(() => {
+    const d = JSON.parse(localStorage.getItem('ac.club.v1'));
+    d.records['entry:sai:2026-01-15'] = { v: { steps: 5000, weight: null, active: null,
+      workout: 'Cycle', habits: [], note: '' }, t: 1 };
+    localStorage.setItem('ac.club.v1', JSON.stringify(d));
+  });
+  await page.reload();
+  await page.click('[data-who="sai"]');
+  await page.waitForTimeout(200);
+  ok(await page.evaluate(() => Store.entry('sai', '2026-01-15').workout.join()) === 'Cycle',
+     'a legacy string workout reads as a one-item list');
+  ok(await page.evaluate(() => Store.isLogged(Store.entry('sai', '2026-01-15'))) === true,
+     'a legacy record still counts as logged');
+  ok(await page.evaluate(() => Store.isLogged(Store.entry('sai', '2026-01-14'))) === false,
+     'an untouched day is still not logged');
+  await page.click('[data-who="arvind"]');
+  await page.waitForTimeout(150);
 
   // --- goals ---
   await page.click('.tab[data-view="settings"]');
