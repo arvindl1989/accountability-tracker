@@ -9,7 +9,7 @@
     "serve:static": "http-server . -p ${PORT:-8080} -c-1"
   },
   "devDependencies": {
-    "playwright": "^1.56.1"
+    "playwright": "1.56.1"
   },
   "dependencies": {
     "http-server": "^14.1.1",
