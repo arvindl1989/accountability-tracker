@@ -24,7 +24,12 @@ async function switchTo(page, who) {
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(e.message));
-  page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
+  page.on('console', m => {
+    if (m.type() !== 'error') return;
+    const from = (m.location() || {}).url || '';
+    if (/\/rest\/v1\/health/.test(from)) return;   // expected probe on a static host
+    errs.push(m.text());
+  });
   page.on('dialog', d => d.accept());
 
   const seed = require('./seed.js');

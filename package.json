@@ -4,13 +4,15 @@
   "private": true,
   "description": "A small shared accountability tracker for Arvind, Abhinandh and Sai.",
   "scripts": {
-    "start": "http-server . -p ${PORT:-8080} -c-1",
-    "test": "node tests/run.js"
+    "start": "node server.js",
+    "test": "node tests/run.js",
+    "serve:static": "http-server . -p ${PORT:-8080} -c-1"
   },
   "devDependencies": {
     "playwright": "^1.56.1"
   },
   "dependencies": {
-    "http-server": "^14.1.1"
+    "http-server": "^14.1.1",
+    "pg": "^8.23.0"
   }
 }

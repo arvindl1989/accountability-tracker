@@ -90,8 +90,17 @@ create policy "club can read"   on public.club_data for select using (true);
 create policy "club can insert" on public.club_data for insert with check (true);
 create policy "club can update" on public.club_data for update using (true) with check (true);
 
-grant usage on schema public to anon;
-grant select, insert, update on table public.club_data to anon;
+-- Guarded so this same file also applies cleanly to a plain Postgres that has
+-- no anon role — the Railway setup, where only the server connects and it owns
+-- the table, so RLS does not apply to it.
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    execute 'grant usage on schema public to anon';
+    execute 'grant select, insert, update on table public.club_data to anon';
+  end if;
+end
+$$;
 
 -- ------------------------------------------------------------- check it
 

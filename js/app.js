@@ -642,13 +642,13 @@
         '<div class="card-head"><h2>Shared board (optional)</h2><span class="sub">' +
           (Sync.enabled() ? 'On' : 'Off') + '</span></div>' +
         '<p class="sd" style="margin:0 0 14px;color:var(--text-dim);font-size:13.5px">' +
-          'Without this the app is yours alone on this device — which is fine. Point all three of us at the same free ' +
-          'Supabase project and the board becomes shared. Setup steps are in the README; paste the project URL and the ' +
-          '<em>anon public</em> key below.</p>' +
+          'Without this the app is yours alone on this device — which is fine. Point all three of us at the same ' +
+          'server and the board becomes shared. That can be this site itself, if it is running with a database ' +
+          'behind it, or a Supabase project. Setup steps are in the README.</p>' +
         '<div class="fields">' +
-          '<div class="field wide"><label for="syncUrl">Project URL</label>' +
-            '<input id="syncUrl" type="text" placeholder="https://abcdefgh.supabase.co" value="' + esc(s.url) + '"></div>' +
-          '<div class="field wide"><label for="syncKey">Anon public key</label>' +
+          '<div class="field wide"><label for="syncUrl">Server URL</label>' +
+            '<input id="syncUrl" type="text" placeholder="https://your-app.up.railway.app" value="' + esc(s.url) + '"></div>' +
+          '<div class="field wide"><label for="syncKey">Key</label>' +
             '<input id="syncKey" type="text" placeholder="eyJhbGciOi..." value="' + esc(s.key) + '"></div>' +
         '</div>' +
         '<div class="btn-row">' +
@@ -658,6 +658,7 @@
           '<span class="spacer"></span>' +
           '<span class="saved-note">' + (Store.prefs.lastPull ? 'Last synced ' + new Date(Store.prefs.lastPull).toLocaleString() : 'Never synced') + '</span>' +
         '</div>' +
+        '<div id="serverHint"></div>' +
         '<div id="syncReport"></div>' +
       '</section>' +
 
@@ -694,6 +695,7 @@
       : viewSettings();
     drawCharts();
     scrollStripToSelection();
+    if (ui.tab === 'settings') offerLocalServer();
     window.scrollTo({ top: 0, behavior: 'instant' in document.body.style ? 'instant' : 'auto' });
   }
 
@@ -861,6 +863,12 @@
 
     if (hit('#syncSave')) { saveSync(); return; }
     if (hit('#syncTest')) { runDiagnostic(); return; }
+    if (hit('#useLocal')) {
+      el('syncUrl').value = location.origin;
+      el('syncKey').focus();
+      toast('Now paste the club key');
+      return;
+    }
     if (hit('#syncOff')) { Sync.save(el('syncUrl').value, el('syncKey').value, false); toast('Sync off'); render(); return; }
     if (hit('#exportBtn')) { doExport(); return; }
     if (hit('#importBtn')) { el('importFile').click(); return; }
@@ -927,6 +935,24 @@
     }).catch(function (err) {
       renderSyncStatus('err', 'Sync error');
       alert(err.message);
+    });
+  }
+
+  /* When the app is served by its own club server, say so and offer it in one
+   * tap — there is nothing to sign up for in that case. */
+  function offerLocalServer() {
+    Sync.detectLocal().then(function (info) {
+      var box = el('serverHint');
+      if (!box || !info) return;
+      var already = (Sync.cfg().url || '').replace(/\/+$/, '') === location.origin;
+      box.innerHTML = '<div class="report report-ok">' +
+        '<p class="report-line"><span class="report-mark">✓</span>' +
+        '<b>This site</b><span>is its own club server' +
+        (info.database ? ', with a database behind it' : ', but no database is attached to it') +
+        (info.locked ? '' : ' and no key set, so its data API is off') + '.</span></p>' +
+        (already ? '' : '<p style="margin:11px 0 0"><button class="btn btn-ghost" id="useLocal">' +
+          'Use this server</button></p>') +
+      '</div>';
     });
   }
 

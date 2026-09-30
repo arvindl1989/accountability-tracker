@@ -453,10 +453,26 @@ var Sync = (function () {
       });
   }
 
+  /* Is the site you are looking at also a club server? If so the shared board
+   * needs no third party — same origin, and the database sits behind it. */
+  var localProbe = null;
+  function detectLocal() {
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') return Promise.resolve(null);
+    // Asked on every Settings render, so answer it once per page load. On a
+    // plain static host this is one expected 404, not seventeen.
+    if (localProbe) return localProbe;
+    localProbe = fetch(location.origin + '/rest/v1/health', { headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { return j && j.club ? j : null; })
+      .catch(function () { return null; });
+    return localProbe;
+  }
+
   function save(url, key, on) {
     Store.prefs.sync = { url: (url || '').trim(), key: (key || '').trim(), on: !!on };
     Store.savePrefs();
   }
 
-  return { enabled: enabled, pull: pull, push: push, full: full, save: save, cfg: cfg, diagnose: diagnose };
+  return { enabled: enabled, pull: pull, push: push, full: full, save: save, cfg: cfg,
+           diagnose: diagnose, detectLocal: detectLocal };
 })();

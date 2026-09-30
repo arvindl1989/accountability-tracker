@@ -7,7 +7,7 @@ const net = require('net');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const SUITES = ['ui.test.js', 'identity.test.js', 'share.test.js', 'sync.test.js', 'diagnose.test.js'];
+const SUITES = ['ui.test.js', 'identity.test.js', 'share.test.js', 'sync.test.js', 'diagnose.test.js', 'server.test.js'];
 
 function freePort() {
   return new Promise((resolve, reject) => {

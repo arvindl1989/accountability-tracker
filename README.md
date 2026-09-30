@@ -36,16 +36,53 @@ to `main`; the deploy workflow is set up to work either way.
 
 ### 2. Make it a shared board (Postgres)
 
+Two ways. Pick one.
+
+#### On Railway — one service, your own database
+
+`npm start` runs `server.js`, which serves the app **and** its data from the
+same process. The browser never touches the database; the server does the SQL
+using `DATABASE_URL`, which stays server-side where a password belongs.
+
+1. In your Railway project, add a **Postgres** service. Railway sets
+   `DATABASE_URL` on your app automatically.
+2. Add one variable of your own: **`CLUB_KEY`**, any long random string. This is
+   what the three of you paste into the app. Without it the data API stays
+   switched off, so the server is never unintentionally open.
+3. Deploy. On boot the server applies `supabase/schema.sql` itself — no SQL
+   editor, no migration step.
+4. Open the app, go to **Settings → Shared board**. It will tell you the site is
+   its own club server; tap **Use this server**, paste your `CLUB_KEY`, and
+   **Turn on & sync**.
+
+Nothing else to sign up for. The anon-key trade-off from the Supabase route
+disappears too, because there is no anon key — just `CLUB_KEY`, which you choose
+and can change whenever you like.
+
+Make sure Railway is deploying the branch you're actually pushing to, under
+**Settings → Source**. A service pinned to a branch that never changes will
+happily serve a months-old build forever.
+
+#### On static hosting — Supabase
+
+If you'd rather host the files somewhere static (GitHub Pages, Netlify), the
+browser has to reach a database directly, so it needs an HTTP layer in front of
+one. That's what Supabase provides.
+
 1. Create a free project at [supabase.com](https://supabase.com).
-2. Open **SQL Editor → New query**, paste the whole of
-   [`supabase/schema.sql`](supabase/schema.sql), and run it. It ends by printing
-   the table, so you'll see it worked. Re-running it later is safe.
-3. **Project Settings → API**: copy the **Project URL** and the **anon public**
-   key.
-4. Each of you pastes both into **Settings → Shared board** in the app and taps
+2. **SQL Editor → New query**, paste [`supabase/schema.sql`](supabase/schema.sql),
+   run it. Re-running it later is safe.
+3. **Project Settings → API**: copy the **Project URL** and the **anon public** key.
+4. Each of you pastes both into **Settings → Shared board** and taps
    *Turn on & sync*.
 
-Everyone's edits then merge on open, on tab focus, and shortly after you log
+Here the key does travel to the browser, so anyone holding it can read and write
+the table. That's the deliberate trade for static hosting with no login, and the
+reason the schema grants no DELETE at all.
+
+### Either way
+
+Everyone's edits merge on open, on tab focus, and shortly after you log
 something. The newest write wins.
 
 **If nothing is reaching the database**, hit **Test connection** in Settings. It
@@ -60,23 +97,23 @@ walks the same path a real sync takes — reach the server, read, write, read ba
 | No club_data table | Right server, schema not run. Paste `supabase/schema.sql` into the SQL editor. |
 | Readable but not writable | The policies or grants are missing. Re-running `supabase/schema.sql` fixes both. |
 
-### A plain Postgres is not enough
+### Why a `DATABASE_URL` alone is never enough
 
-The app talks to `/rest/v1/club_data` over HTTPS — that's **PostgREST**, the
-HTTP layer Supabase puts in front of Postgres. It does not speak the Postgres
-wire protocol and cannot open a database connection from a browser, because no
-browser can.
+No browser can open a Postgres connection — it's a TCP wire protocol, not HTTP.
+So a connection string on its own can never be what the app talks to, however
+healthy the database is. Something has to sit in front and speak HTTP. That is
+`server.js` on the Railway route, and Supabase's own REST layer on the static
+route.
 
-So a `DATABASE_URL` from Railway, Neon, RDS or anywhere else won't work on its
-own, however healthy the database is. Either use Supabase, which bundles
-PostgREST, or run PostgREST yourself in front of your own Postgres and point the
-app at that.
+It also means a `DATABASE_URL` must never be handed to the browser: it contains
+your password. On Railway it stays in the server process and is never sent to
+the page — there's a test asserting no connection string appears in the HTML.
 
 **What the schema does beyond creating a table:** it constrains keys to the
 three shapes the app writes, caps each row at 4 KB, clamps the merge clock to
 the server's (a phone with its date set to 2099 would otherwise win every merge
-forever), and grants no DELETE at all — so even someone holding the key can't
-erase your history.
+forever), and grants no DELETE at all. The same file applies to both setups —
+the Supabase-only grants are skipped when there's no `anon` role.
 
 **Be aware:** the anon key lets anyone holding it read and write your table.
 That's the deliberate trade for a three-person tracker with no login. The key
@@ -204,7 +241,8 @@ js/store.js     records, dates, scoring, streaks, Supabase sync
 js/charts.js    the SVG line and bar charts, tooltips, table view
 js/share.js     composes the WhatsApp summaries
 js/app.js       views, rendering, events
-supabase/       schema.sql for the shared board
+server.js       serves the app and its data; used by `npm start`
+supabase/       schema.sql, applied by the server on boot or pasted into Supabase
 ```
 
 No framework, no bundler, no dependencies at runtime. Charts are hand-rolled SVG
@@ -218,10 +256,10 @@ both the light and dark surfaces, so nobody's line disappears.
 npm install && npm test   # drives the real page in a headless browser
 ```
 
-104 checks across five suites: the UI, sign-in / sign-out and personal links,
-the WhatsApp share text, a two-device sync test that runs both browsers against
-a stand-in for Supabase's REST API, and the connection diagnostic against each
-way the shared board actually fails.
+114 checks across six suites: the UI, sign-in / sign-out and personal links, the
+WhatsApp share text, a two-device sync test, the connection diagnostic against
+each way the shared board fails, and an end-to-end run of the real `server.js`
+against a real Postgres with two browsers talking to it.
 That mock keeps rows in memory by default so the suite runs anywhere. To exercise
 `supabase/schema.sql` itself, point it at a real Postgres that has the schema
 applied:
