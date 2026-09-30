@@ -64,14 +64,15 @@ h1,h2,h3{margin:0;line-height:1.25;letter-spacing:-.01em}
 .brand-text strong{font-size:15px;letter-spacing:-.01em;white-space:nowrap}
 .brand-text small{color:var(--text-faint);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .topbar-right{display:flex;align-items:center;gap:8px}
-.whoami{display:flex;gap:4px;background:var(--bg-elev);border:1px solid var(--line);border-radius:999px;padding:3px}
-.who-btn{
-  border:0;background:transparent;cursor:pointer;border-radius:999px;
-  padding:5px 11px;font-size:13px;font-weight:600;color:var(--text-dim);
-  transition:background .15s,color .15s;white-space:nowrap;
+.whochip{
+  display:flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;
+  background:var(--bg-elev);border:1px solid var(--line);border-radius:999px;
+  padding:3px 13px 3px 3px;font-size:13px;font-weight:700;color:var(--text);
+  transition:border-color .15s;
 }
-.who-btn:hover{color:var(--text)}
-.who-btn.is-me{background:var(--who);color:#0b0f14}
+.whochip:hover{border-color:var(--who)}
+.whochip[hidden]{display:none}
+.whochip .avatar{width:28px;height:28px;font-size:11px;background:var(--who)}
 .icon-btn{
   border:1px solid var(--line);background:var(--bg-elev);cursor:pointer;
   width:34px;height:34px;border-radius:999px;font-size:15px;line-height:1;
@@ -390,3 +391,41 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
   .wa-pair{width:100%}
   .wa-pair .btn-wa{flex:1;justify-content:center}
 }
+
+/* ---------- first-run identity ---------- */
+.setup{
+  max-width:520px;margin:6vh auto 0;text-align:center;
+  background:var(--bg-elev);border:1px solid var(--line);
+  border-radius:var(--radius);padding:32px 24px;box-shadow:var(--shadow);
+}
+.setup h1{font-size:22px;margin-bottom:8px}
+.setup p{color:var(--text-dim);font-size:14px;margin:0 auto 24px;max-width:40ch;line-height:1.55}
+.setup-people{display:flex;flex-direction:column;gap:10px}
+.setup-person{
+  display:flex;align-items:center;gap:13px;cursor:pointer;text-align:left;
+  background:var(--bg-elev-2);border:1px solid var(--line);border-left:3px solid var(--pc);
+  border-radius:var(--radius-sm);padding:13px 16px;font-size:16px;font-weight:700;
+  color:var(--text);transition:.15s;
+}
+.setup-person:hover{border-color:var(--pc);background:color-mix(in srgb,var(--pc) 12%,var(--bg-elev-2))}
+.setup-person .avatar{background:var(--pc)}
+.setup-name{flex:1}
+
+/* ---------- identity in settings ---------- */
+.who-pick{display:flex;gap:8px;flex-wrap:wrap}
+.who-opt{
+  display:flex;align-items:center;gap:9px;cursor:pointer;flex:1;min-width:130px;
+  background:var(--bg-elev-2);border:1px solid var(--line);border-radius:var(--radius-sm);
+  padding:10px 13px;font-size:14px;font-weight:600;color:var(--text-dim);transition:.15s;
+}
+.who-opt:hover{color:var(--text);border-color:var(--pc)}
+.who-opt .avatar{width:28px;height:28px;font-size:11px;background:var(--pc);opacity:.55}
+.who-opt.is-me{color:var(--text);border-color:var(--pc);
+  background:color-mix(in srgb,var(--pc) 13%,var(--bg-elev-2))}
+.who-opt.is-me .avatar{opacity:1}
+
+.linkrows{margin-top:18px;padding-top:16px;border-top:1px solid var(--line-soft)}
+.linkrow{display:flex;align-items:center;gap:10px;padding:5px 0}
+.linkrow code{font-family:var(--mono);font-size:12.5px;color:var(--text-dim);flex:1}
+.linkrow .btn-copy{padding:7px 11px;font-size:14px}
+@media (max-width:520px){.who-opt{min-width:0;flex:1 1 100%}}

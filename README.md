@@ -63,10 +63,28 @@ one-time sign-in.
 | **Today** | Log the day — steps, weight, active minutes, workout, habit chips, a note. Scroll the date strip to fix up a day you missed. Below it, what all three of you did today. |
 | **Board** | The weekly leaderboard, a 4-week show-up grid, and 30-day consistency. Arrow back through past weeks. |
 | **Trends** | Daily steps or active minutes as grouped bars against your goal, and everyone's weight over 30 days / 90 days / a year. Every chart has a table view. |
-| **Settings** | Per-person goals, kg/lb, theme, sharing, backup. |
+| **Settings** | Who you are, per-person goals, kg/lb, theme, sharing, backup. |
 
-Pick who you are with the name buttons at the top right. Anyone can log from any
-device — useful when one of you is nagging the other two.
+## Being yourself
+
+The first time you open the app it asks who you are. Pick once; it's remembered,
+and everything you log from then on is filed against you. The chip in the top
+right shows who that is — tap it to change in Settings.
+
+**Personal links.** Settings gives each of you a link ending `?me=arvind`,
+`?me=abhinandh` or `?me=sai`. Open your own and the app knows you without
+anyone picking from a list, which is the easy way to set up a new phone or
+recover after a browser clears its storage. Add *your* link to your home screen
+and the icon opens as you.
+
+The link identifies you once and then drops out of the address bar, so a URL
+copied from there afterwards won't hand your identity to whoever you send it to.
+
+Switching is deliberate rather than one tap from every screen, which is the
+point — but it isn't security. Anyone with the app can still choose to be
+anyone, and anyone with the anon key can write to the table. If you want people
+actually unable to edit each other's days, that's Supabase magic-link auth with
+policies keyed on `auth.uid()`, and it's a bigger job.
 
 ## How the points work
 
@@ -163,8 +181,9 @@ both the light and dark surfaces, so nobody's line disappears.
 npm install && npm test   # drives the real page in a headless browser
 ```
 
-55 checks across three suites: the UI, the WhatsApp share text, and a two-device
-sync test that runs both browsers against a stand-in for Supabase's REST API.
+84 checks across four suites: the UI, first-run identity and personal links, the
+WhatsApp share text, and a two-device sync test that runs both browsers against
+a stand-in for Supabase's REST API.
 That mock keeps rows in memory by default so the suite runs anywhere. To exercise
 `supabase/schema.sql` itself, point it at a real Postgres that has the schema
 applied:

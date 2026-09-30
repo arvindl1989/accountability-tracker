@@ -63,11 +63,28 @@
     document.documentElement.style.setProperty('--me-color', Store.me().color);
   }
   function renderWhoami() {
+    var chip = el('whoChip');
+    if (!Store.hasIdentity()) { chip.hidden = true; return; }
     var me = Store.me();
-    el('whoami').innerHTML = Store.people().map(function (p) {
-      return '<button class="who-btn' + (p.id === me.id ? ' is-me' : '') + '" style="--who:' + p.color +
-        '" data-who="' + p.id + '">' + esc(p.name.split(' ')[0]) + '</button>';
-    }).join('');
+    chip.hidden = false;
+    chip.style.setProperty('--who', me.color);
+    chip.innerHTML = '<span class="avatar">' + esc(me.initials) + '</span>' +
+      '<span class="whochip-name">' + esc(me.name) + '</span>';
+  }
+
+  /* Anyone landing without an identity answers one question before anything
+   * else. A wrong guess here files someone else's run against you. */
+  function viewSetup() {
+    return '<section class="setup">' +
+      '<h1>Who\'s using this device?</h1>' +
+      '<p>Pick yourself once. The app remembers, and everything after this is ' +
+      'logged as you. You can change it in Settings.</p>' +
+      '<div class="setup-people">' + Store.people().map(function (p) {
+        return '<button class="setup-person" style="--pc:' + p.color + '" data-who="' + p.id + '">' +
+          '<span class="avatar">' + esc(p.initials) + '</span>' +
+          '<span class="setup-name">' + esc(p.name) + '</span></button>';
+      }).join('') + '</div>' +
+    '</section>';
   }
   function renderSyncStatus(state, text) {
     var pill = el('syncStatus');
@@ -365,6 +382,28 @@
     Share.toWhatsApp(text);
   }
 
+  /* One link each. Open yours and the app knows you without anybody picking
+   * from a list — handy on a new phone, or after a browser clears its storage. */
+  function personalLink(pid) {
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') return '';
+    return location.origin + location.pathname.replace(/index\.html$/, '') + '?me=' + pid;
+  }
+  function personalLinks() {
+    if (!personalLink('arvind')) {
+      return '<p class="sd" style="margin:14px 0 0">Personal links appear once the app is ' +
+        'served from a URL rather than opened as a local file.</p>';
+    }
+    return '<div class="linkrows">' +
+      '<p class="sd" style="margin:0 0 10px">Send each other these. Opening your own link ' +
+      'sets you on that device — worth adding yours to your home screen.</p>' +
+      Store.people().map(function (p) {
+        return '<div class="linkrow"><span class="legend-swatch" style="background:' + p.color + '"></span>' +
+          '<code>?me=' + esc(p.id) + '</code>' +
+          '<button class="btn btn-ghost btn-copy" data-copylink="' + p.id + '" ' +
+          'aria-label="Copy ' + esc(p.name) + '\'s link">⧉</button></div>';
+      }).join('') + '</div>';
+  }
+
   function goalInput(pid, key, label, value, step, ph) {
     var id = 'goal_' + pid + '_' + key;
     return '<span class="mini"><label for="' + id + '">' + esc(label) + '</label>' +
@@ -544,7 +583,18 @@
   function viewSettings() {
     var s = Sync.cfg();
     var st = Store.stats();
+    var me = Store.me();
     return '' +
+      '<section class="card">' +
+        '<div class="card-head"><h2>You</h2><span class="sub">Everything you log is filed against this</span></div>' +
+        '<div class="who-pick">' + Store.people().map(function (p) {
+          return '<button class="who-opt' + (p.id === me.id ? ' is-me' : '') + '" style="--pc:' + p.color +
+            '" data-who="' + p.id + '"><span class="avatar">' + esc(p.initials) + '</span>' +
+            esc(p.name) + '</button>';
+        }).join('') + '</div>' +
+        personalLinks() +
+      '</section>' +
+
       '<section class="card">' +
         '<div class="card-head"><h2>Your goals</h2><span class="sub">Each of us sets our own</span></div>' +
         Store.people().map(function (p) {
@@ -613,6 +663,12 @@
     applyMe();
     renderWhoami();
     renderSyncStatus();
+    var known = Store.hasIdentity();
+    document.getElementById('tabs').hidden = !known;
+    if (!known) {
+      view.innerHTML = viewSetup();
+      return;
+    }
     document.querySelectorAll('.tab').forEach(function (t) {
       t.classList.toggle('is-active', t.dataset.view === ui.tab);
     });
@@ -677,11 +733,10 @@
     render();
   });
 
-  document.getElementById('whoami').addEventListener('click', function (ev) {
-    var b = ev.target.closest('[data-who]');
-    if (!b) return;
+  document.getElementById('whoChip').addEventListener('click', function () {
     commit(false);
-    Store.setMe(b.dataset.who);
+    ui.tab = 'settings';
+    render();
   });
 
   document.getElementById('themeBtn').addEventListener('click', function () {
@@ -694,6 +749,20 @@
     var t = ev.target;
     var hit = function (sel) { return t.closest(sel); };
     var n;
+
+    if ((n = hit('[data-who]'))) {
+      var first = !Store.hasIdentity();
+      commit(false);
+      Store.setMe(n.dataset.who);                 // emits, so render() follows
+      if (first) { ui.tab = 'today'; render(); toast('Hello, ' + Store.me().name); }
+      return;
+    }
+    if ((n = hit('[data-copylink]'))) {
+      Share.copy(personalLink(n.dataset.copylink))
+        .then(function () { toast('Link copied'); })
+        .catch(function () { toast('Could not copy'); });
+      return;
+    }
 
     if ((n = hit('[data-date]'))) { commit(false); ui.date = n.dataset.date; render(); return; }
 
@@ -846,6 +915,20 @@
   }
 
   /* ============================================================= boot */
+
+  /* ?me=<id> identifies whoever opened the link, then the query is stripped:
+   * a URL copied out of the address bar afterwards should not hand your
+   * identity to whoever you send it to. localStorage carries it from here. */
+  function adoptIdentityFromUrl() {
+    var m = /[?&]me=([a-z0-9_-]+)/i.exec(location.search);
+    if (m && Store.knows(m[1].toLowerCase())) Store.prefs.me = m[1].toLowerCase();
+    Store.savePrefs();
+    if (m && location.search && window.history && history.replaceState) {
+      history.replaceState(null, '', location.pathname + location.hash);
+    }
+  }
+  adoptIdentityFromUrl();
+
   Store.onChange(function () { render(); });
 
   // Pull on load and when the tab regains focus, so the board is never stale.

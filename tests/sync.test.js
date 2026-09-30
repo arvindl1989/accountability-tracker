@@ -12,6 +12,15 @@ const TODAY = (d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')
 
 let fails = 0;
 const ok = (c, m) => { console.log((c ? '  PASS  ' : '  FAIL  ') + m); if (!c) fails++; };
+
+async function switchTo(page, who) {
+  await page.click('.tab[data-view="settings"]');
+  await page.waitForTimeout(120);
+  await page.click(`[data-who="${who}"]`);
+  await page.waitForTimeout(150);
+  await page.click('.tab[data-view="today"]');
+  await page.waitForTimeout(200);
+}
 let store;   // set once the mock is up
 
 // Read a row the way the tests want to assert on it, whichever backend is used.
@@ -55,8 +64,7 @@ async function device(browser, label, prefs) {
 
   // ---------- device B sees it ----------
   const B = await device(browser, 'B', { me: 'sai' });
-  await B.click('[data-who="arvind"]');
-  await B.waitForTimeout(400);
+  await switchTo(B, 'arvind');
   ok(await B.inputValue('#f_steps') === '12500', "B pulled A's day");
   ok((await B.textContent('#todayCrew')).includes('12.5k'), "B's crew card shows A");
 
@@ -75,8 +83,7 @@ async function device(browser, label, prefs) {
   await A.waitForTimeout(2000);
   await B.reload();
   await B.waitForTimeout(1200);
-  await B.click('[data-who="arvind"]');
-  await B.waitForTimeout(300);
+  await switchTo(B, 'arvind');
   ok(await B.inputValue('#f_steps') === '8000', "B picks up A's newer value");
 
   // a stale write must not clobber the newer one

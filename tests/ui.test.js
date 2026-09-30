@@ -6,6 +6,16 @@ const TODAY = (d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')
 let fails = 0;
 const ok = (c, m) => { console.log((c ? '  PASS  ' : '  FAIL  ') + m); if (!c) fails++; };
 
+// identity moved out of the top bar; changing it is a deliberate trip to Settings
+async function switchTo(page, who) {
+  await page.click('.tab[data-view="settings"]');
+  await page.waitForTimeout(120);
+  await page.click(`[data-who="${who}"]`);
+  await page.waitForTimeout(150);
+  await page.click('.tab[data-view="today"]');
+  await page.waitForTimeout(150);
+}
+
 (async () => {
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 1180, height: 900 } });
@@ -19,6 +29,9 @@ const ok = (c, m) => { console.log((c ? '  PASS  ' : '  FAIL  ') + m); if (!c) f
   // seed once — addInitScript also runs on reload, which would wipe the test's own writes
   await page.addInitScript(d => {
     if (!localStorage.getItem('ac.club.v1')) localStorage.setItem('ac.club.v1', JSON.stringify(d));
+    if (!localStorage.getItem('ac.prefs.v1')) {
+      localStorage.setItem('ac.prefs.v1', JSON.stringify({ me: 'arvind', theme: 'dark' }));
+    }
   }, seed());
   await page.goto(URL);
 
@@ -89,13 +102,11 @@ const ok = (c, m) => { console.log((c ? '  PASS  ' : '  FAIL  ') + m); if (!c) f
   ok(afterReload === '12500', 'survives reload (got "' + afterReload + '")');
 
   // --- switching person gives a clean slate, then switching back restores ---
-  await page.click('[data-who="sai"]');
-  await page.waitForTimeout(120);
+  await switchTo(page, 'sai');
   ok(await page.inputValue('#f_steps') === '', 'switching person clears the form');
   await page.fill('#f_steps', '8000');
   await page.locator('#f_steps').blur();
-  await page.click('[data-who="arvind"]');
-  await page.waitForTimeout(120);
+  await switchTo(page, 'arvind');
   const back = await page.inputValue('#f_steps');
   ok(back === '12500', "switching back restores Arvind's day (got \"" + back + '")');
 
@@ -121,16 +132,14 @@ const ok = (c, m) => { console.log((c ? '  PASS  ' : '  FAIL  ') + m); if (!c) f
     localStorage.setItem('ac.club.v1', JSON.stringify(d));
   });
   await page.reload();
-  await page.click('[data-who="sai"]');
-  await page.waitForTimeout(200);
+  await switchTo(page, 'sai');
   ok(await page.evaluate(() => Store.entry('sai', '2026-01-15').workout.join()) === 'Cycle',
      'a legacy string workout reads as a one-item list');
   ok(await page.evaluate(() => Store.isLogged(Store.entry('sai', '2026-01-15'))) === true,
      'a legacy record still counts as logged');
   ok(await page.evaluate(() => Store.isLogged(Store.entry('sai', '2026-01-14'))) === false,
      'an untouched day is still not logged');
-  await page.click('[data-who="arvind"]');
-  await page.waitForTimeout(150);
+  await switchTo(page, 'arvind');
 
   // --- goals ---
   await page.click('.tab[data-view="settings"]');

@@ -12,6 +12,9 @@ const ok = (c, m) => { console.log((c ? '  PASS  ' : '  FAIL  ') + m); if (!c) f
   page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
   await page.addInitScript(d => {
     if (!localStorage.getItem('ac.club.v1')) localStorage.setItem('ac.club.v1', JSON.stringify(d));
+    if (!localStorage.getItem('ac.prefs.v1')) {
+      localStorage.setItem('ac.prefs.v1', JSON.stringify({ me: 'arvind', theme: 'dark' }));
+    }
     // capture the hand-off instead of actually opening WhatsApp
     window.__opened = [];
     const realOpen = window.open;

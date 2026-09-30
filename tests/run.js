@@ -12,7 +12,7 @@ const server = spawn(process.execPath,
 const stop = code => { server.kill(); process.exit(code); };
 process.on('SIGINT', () => stop(130));
 
-const SUITES = ['ui.test.js', 'share.test.js', 'sync.test.js'];
+const SUITES = ['ui.test.js', 'identity.test.js', 'share.test.js', 'sync.test.js'];
 
 function runSuite(i, failed) {
   if (i === SUITES.length) return stop(failed ? 1 : 0);

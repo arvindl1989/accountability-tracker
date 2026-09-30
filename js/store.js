@@ -34,7 +34,9 @@ var Store = (function () {
   var POINTS = { logged: 2, steps: 10, active: 10, weight: 5, habit: 3 };
 
   var data = { records: {} };
-  var prefs = { me: 'arvind', theme: 'dark', sync: { url: '', key: '', on: false }, lastPull: 0 };
+  // me is '' until someone says who they are — an unanswered question, not a
+  // silent default that logs Abhinandh's run against Arvind.
+  var prefs = { me: '', theme: 'dark', sync: { url: '', key: '', on: false }, lastPull: 0 };
   var listeners = [];
 
   /* ---------- dates ---------- */
@@ -105,6 +107,11 @@ var Store = (function () {
   }
   function me() { return person(prefs.me); }
   function setMe(id) { prefs.me = person(id).id; savePrefs(); emit(); }
+  function hasIdentity() { return !!prefs.me && knows(prefs.me); }
+  function knows(id) {
+    for (var i = 0; i < PEOPLE.length; i++) if (PEOPLE[i].id === id) return true;
+    return false;
+  }
 
   /* ---------- entries ---------- */
   function entryKey(pid, date) { return 'entry:' + pid + ':' + date; }
@@ -285,6 +292,7 @@ var Store = (function () {
     iso: iso, today: today, shift: shift, parse: parse, rangeBack: rangeBack,
     weekStart: weekStart, daysBetween: daysBetween,
     people: people, person: person, me: me, setMe: setMe,
+    hasIdentity: hasIdentity, knows: knows,
     entry: entry, saveEntry: saveEntry, clearEntry: clearEntry, isLogged: isLogged, num: num,
     workoutList: workoutList,
     goals: goals, saveGoals: saveGoals, units: units, setUnits: setUnits,
