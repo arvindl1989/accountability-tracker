@@ -262,7 +262,7 @@
 
   function dateStripHTML() {
     var me = Store.me(), today = Store.today();
-    return Store.rangeBack(14, today).map(function (d) {
+    return Store.sinceStart(14, today).map(function (d) {
       var date = Store.parse(d);
       var logged = Store.isLogged(Store.entry(me.id, d));
       return '<button class="daybtn' + (logged ? ' has' : '') + (d === ui.date ? ' is-sel' : '') + '" data-date="' + d + '">' +
@@ -362,7 +362,8 @@
       '<div class="section-title">' +
         '<h2>Week of ' + esc(Charts.dayLabel(start)) + ' – ' + esc(Charts.dayLabel(end)) + '</h2>' +
         '<span class="chart-controls">' +
-          '<button class="btn btn-ghost" data-week="-1" style="padding:6px 12px">‹ Prev</button>' +
+          '<button class="btn btn-ghost" data-week="-1" style="padding:6px 12px"' +
+            (start <= Store.weekStart(Store.startDate()) ? ' disabled' : '') + '>‹ Prev</button>' +
           '<button class="btn btn-ghost" data-week="1" style="padding:6px 12px"' + (isThisWeek ? ' disabled' : '') + '>Next ›</button>' +
         '</span>' +
       '</div>' +
@@ -402,7 +403,8 @@
       '</section>' +
 
       '<section class="card">' +
-        '<div class="card-head"><h2>Consistency</h2><span class="sub">Days logged in the last 30</span></div>' +
+        '<div class="card-head"><h2>Consistency</h2><span class="sub">' +
+          esc(consistencyLabel()) + '</span></div>' +
         Store.people().map(function (p) {
           var pct = Store.consistency(p.id, 30);
           return meterRow(p.name, pct, 100, pct + '%', p.color);
@@ -470,6 +472,13 @@
       '" placeholder="' + esc(ph) + '" value="' + (value === null || value === undefined ? '' : value) + '"></span>';
   }
 
+  // "last 30 days" is a lie in the club's first month.
+  function consistencyLabel() {
+    var n = Store.sinceStart(30).length;
+    return n >= 30 ? 'Days logged in the last 30'
+      : 'Days logged since ' + Charts.dayLabel(Store.startDate()) + ' (' + n + ' so far)';
+  }
+
   function tile(value, label, delta, cls) {
     return '<div class="tile"><div class="tv">' + esc(value) + '</div><div class="tl">' + esc(label) + '</div>' +
       (delta ? '<div class="td ' + (cls || 'flat') + '">' + esc(delta) + '</div>' : '') + '</div>';
@@ -501,9 +510,9 @@
   }
 
   function gridHTML() {
-    var days = Store.rangeBack(28);
+    var days = Store.sinceStart(28);
     var max = Store.maxDailyScore();
-    return '<div class="sgrid">' + Store.people().map(function (p) {
+    return '<div class="sgrid" style="--cols:' + days.length + '">' + Store.people().map(function (p) {
       return '<div class="sgrid-row">' +
         '<span class="sgrid-name">' + esc(p.name) + '</span>' +
         '<span class="sgrid-cells">' + days.map(function (d) {
@@ -516,14 +525,15 @@
         }).join('') + '</span>' +
       '</div>';
     }).join('') + '</div>' +
-    '<div class="sgrid-legend"><span>4 weeks ago</span><span>today</span></div>';
+    '<div class="sgrid-legend"><span>' + esc(Charts.dayLabel(days[0])) + '</span>' +
+    '<span>today</span></div>';
   }
 
   /* ============================================================ TRENDS */
   function viewTrends() {
     pendingCharts = {};
-    var barDates = Store.rangeBack(ui.barRange);
-    var lineDates = Store.rangeBack(ui.lineRange);
+    var barDates = Store.sinceStart(ui.barRange);
+    var lineDates = Store.sinceStart(ui.lineRange);
     var people = visiblePeople();
     var allPeople = Store.people();
 
@@ -682,6 +692,12 @@
             '<button data-units="kg"' + (Store.units() === 'kg' ? ' class="on"' : '') + '>kg</button>' +
             '<button data-units="lb"' + (Store.units() === 'lb' ? ' class="on"' : '') + '>lb</button>' +
           '</span></div></div>' +
+        '<div class="set-row"><div><div class="sl">Club start date</div>' +
+          '<div class="sd">Nothing before this counts. Streaks, consistency and the charts ' +
+          'all begin here, so a fresh club is not judged on days it did not exist.</div></div>' +
+          '<div class="sc"><input type="date" id="clubStart" value="' + esc(Store.startDate()) +
+          '" max="' + Store.today() + '"></div></div>' +
+
         '<div class="set-row"><div><div class="sl">Theme</div><div class="sd">Dark by default. Light works too.</div></div>' +
           '<div class="sc"><span class="view-toggle">' +
             '<button data-set-theme="dark"' + (Store.prefs.theme === 'dark' ? ' class="on"' : '') + '>Dark</button>' +
@@ -846,7 +862,12 @@
       return;
     }
 
-    if ((n = hit('[data-date]'))) { commit(false); ui.date = n.dataset.date; render(); return; }
+    if ((n = hit('[data-date]'))) {
+      commit(false);
+      ui.date = Store.before(n.dataset.date) ? Store.startDate() : n.dataset.date;
+      render();
+      return;
+    }
 
     if ((n = hit('[data-habit]'))) {
       var e = ensureDraft();
@@ -970,6 +991,13 @@
   view.addEventListener('change', function (ev) {
     var t = ev.target;
     if (t.matches('[data-f]') || t.id === 'f_note') { clearTimeout(typeTimer); readInputs(); commit(false); return; }
+    if (t.id === 'clubStart') {
+      Store.setStartDate(t.value);
+      if (Store.before(ui.date)) ui.date = Store.today();
+      if (Sync.enabled()) queuePush();
+      toast('Start date set to ' + Charts.dayLabel(Store.startDate()));
+      return;
+    }
     if (t.matches('[data-goal]')) {
       var parts = t.dataset.goal.split(':');
       var g = Store.goals(parts[0]);
@@ -1130,12 +1158,17 @@
   Store.onChange(function () { render(); });
 
   // Pull on load and when the tab regains focus, so the board is never stale.
-  function backgroundPull() {
+  /* A server that has just cold-started is listening before its schema has
+   * landed, so the first pull can lose a race it will win a second later.
+   * Retry quietly before calling it an error. */
+  function backgroundPull(attempt) {
     if (!Sync.enabled()) return;
+    attempt = attempt || 1;
     renderSyncStatus('', 'Syncing…');
     Sync.pull()
       .then(function () { renderSyncStatus('ok', 'Synced'); })
       .catch(function (err) {
+        if (attempt < 3) return setTimeout(function () { backgroundPull(attempt + 1); }, attempt * 1200);
         renderSyncStatus('err', 'Sync error — open Settings and Test connection');
         console.warn(err);
       });

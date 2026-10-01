@@ -132,21 +132,55 @@ async function switchTo(page, who) {
   ok(past === 4321, 'a past day saves against its own date');
 
   // --- a legacy record (workout as a plain string) still reads ---
-  await page.evaluate(() => {
+  // dated inside the club's lifetime: days before its start are ignored by design
+  const legacyDay = await page.evaluate(() => Store.shift(Store.today(), -20));
+  await page.evaluate(day => {
     const d = JSON.parse(localStorage.getItem('ac.club.v1'));
-    d.records['entry:sai:2026-01-15'] = { v: { steps: 5000, weight: null, active: null,
+    d.records['entry:sai:' + day] = { v: { steps: 5000, weight: null, active: null,
       workout: 'Cycle', habits: [], note: '' }, t: 1 };
     localStorage.setItem('ac.club.v1', JSON.stringify(d));
-  });
+  }, legacyDay);
   await page.reload();
   await switchTo(page, 'sai');
-  ok(await page.evaluate(() => Store.entry('sai', '2026-01-15').workout.join()) === 'Cycle',
+  ok(await page.evaluate(d => Store.entry('sai', d).workout.join(), legacyDay) === 'Cycle',
      'a legacy string workout reads as a one-item list');
-  ok(await page.evaluate(() => Store.isLogged(Store.entry('sai', '2026-01-15'))) === true,
+  ok(await page.evaluate(d => Store.isLogged(Store.entry('sai', d)), legacyDay) === true,
      'a legacy record still counts as logged');
-  ok(await page.evaluate(() => Store.isLogged(Store.entry('sai', '2026-01-14'))) === false,
-     'an untouched day is still not logged');
+  // the seed fills most days, so clear one to have a genuinely empty one to test
+  ok(await page.evaluate(d => {
+    const empty = Store.shift(d, -1);
+    Store.clearEntry('sai', empty);
+    return Store.isLogged(Store.entry('sai', empty));
+  }, legacyDay) === false, 'a day with nothing in it is still not logged');
   await switchTo(page, 'arvind');
+
+  // --- nothing before the club's start date exists ---
+  const START = await page.evaluate(() => Store.startDate());
+  ok(/^\d{4}-\d{2}-\d{2}$/.test(START), 'there is a club start date (' + START + ')');
+
+  const stripDates = await page.evaluate(() =>
+    [...document.querySelectorAll('.daybtn')].map(b => b.dataset.date));
+  ok(stripDates.every(d => d >= START), 'the date strip offers no day before it');
+
+  ok(await page.evaluate(s => {
+    const before = Store.shift(s, -1);
+    Store.saveEntry('arvind', before, { steps: 9999, habits: [], workout: [] });
+    return Store.isLogged(Store.entry('arvind', before));
+  }, START) === false, 'a record dated before the start is ignored');
+
+  ok(await page.evaluate(() => Store.sinceStart(400).length) <= 400 &&
+     await page.evaluate(s => Store.sinceStart(400)[0] === s, START),
+     'ranges are clipped to the start date');
+
+  await page.click('.tab[data-view="board"]');
+  await page.waitForTimeout(200);
+  const pct = await page.evaluate(() => Store.consistency('arvind', 30));
+  ok(pct >= 0 && pct <= 100, 'consistency stays a real percentage in the first month (' + pct + '%)');
+  ok((await page.textContent('body')).includes('Days logged since') ||
+     (await page.textContent('body')).includes('last 30'),
+     'and the label says which it is measuring');
+  await page.click('.tab[data-view="today"]');
+  await page.waitForTimeout(200);
 
   // --- goals ---
   await page.click('.tab[data-view="settings"]');

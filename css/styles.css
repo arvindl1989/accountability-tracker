@@ -325,7 +325,7 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
 .sgrid-row{display:flex;align-items:center;gap:10px}
 .sgrid-name{font-size:12.5px;color:var(--text-dim);width:82px;flex:0 0 auto;font-weight:600;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sgrid-cells{display:grid;grid-template-columns:repeat(28,minmax(0,1fr));gap:2px;flex:1;min-width:0}
+.sgrid-cells{display:grid;grid-template-columns:repeat(var(--cols,28),minmax(0,1fr));gap:2px;flex:1;min-width:0}
 .sgrid-cell{display:block;width:100%;min-width:0;aspect-ratio:1;border-radius:2.5px}
 .sgrid-legend{display:flex;justify-content:space-between;margin:9px 0 0 92px;
   font-size:10.5px;color:var(--text-faint)}

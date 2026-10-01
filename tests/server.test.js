@@ -3,6 +3,7 @@
 const { chromium } = require('playwright');
 const { spawn, execFileSync } = require('child_process');
 const http = require('http');
+const net = require('net');
 const path = require('path');
 
 const PGHOST = process.env.PGHOST || '/tmp/acdb/sock';
@@ -14,6 +15,14 @@ const ok = (c, m) => { console.log((c ? '  PASS  ' : '  FAIL  ') + m); if (!c) f
 const psql = (args, db) => execFileSync('psql',
   ['-h', PGHOST, '-p', PGPORT, '-U', 'postgres', '-tA', '-q', ...(db ? ['-d', db] : []), ...args],
   { encoding: 'utf8' }).trim();
+
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const s = net.createServer();
+    s.once('error', reject);
+    s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => resolve(port)); });
+  });
+}
 
 function waitFor(port, tries = 80) {
   return new Promise((resolve, reject) => {
@@ -35,7 +44,7 @@ function waitFor(port, tries = 80) {
     process.exit(0);
   }
 
-  const PORT = 8402;
+  const PORT = await freePort();
   const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
     env: Object.assign({}, process.env, {
       PORT: String(PORT), CLUB_KEY: KEY,
@@ -48,8 +57,18 @@ function waitFor(port, tries = 80) {
   try {
     await waitFor(PORT);
     ok(true, 'server starts and answers /rest/v1/health');
-    ok(psql(['-c', "select to_regclass('public.club_data')"], DB) === 'club_data',
-       'it creates its own schema on first boot');
+    // The server listens before migrating, on purpose, so a healthy port does
+    // not mean the schema has landed yet. Wait for the table rather than assume.
+    const schemaReady = await (async () => {
+      for (let i = 0; i < 40; i++) {
+        try {
+          if (psql(['-c', "select to_regclass('public.club_data')"], DB) === 'club_data') return true;
+        } catch (e) {}
+        await new Promise(r => setTimeout(r, 250));
+      }
+      return false;
+    })();
+    ok(schemaReady, 'it creates its own schema on first boot');
 
     const APP = `http://127.0.0.1:${PORT}/index.html`;
     const browser = await chromium.launch();
@@ -85,7 +104,12 @@ function waitFor(port, tries = 80) {
 
     // ---- the app is served by the same process that holds the data ----
     const A = await open('arvind');
-    ok((await A.page.textContent('#syncStatus')).includes('Synced'), 'the app loads and reports Synced');
+    // wait for the state, not a guessed duration: the first pull races the page
+    // load and loses under a loaded machine
+    const synced = await A.page.waitForFunction(
+      () => (document.getElementById('syncStatus').textContent || '').includes('Synced'),
+      null, { timeout: 10000 }).then(() => true).catch(() => false);
+    ok(synced, 'the app loads and reports Synced');
 
     await A.page.fill('#f_steps', '9100'); await A.page.locator('#f_steps').blur();
     await A.page.click('[data-workout="Run"]');
@@ -160,14 +184,16 @@ function waitFor(port, tries = 80) {
     ok(/saved on this device only/i.test(b), 'sync switched off: the banner says data is device-only');
     await offCtx.close();
 
-    const noKeySrv = await bootWith({ CLUB_KEY: '', DATABASE_URL: DB_URL }, 8407);
-    b = await bannerFor(8407, signedInNoSync);
+    const p407 = await freePort();
+    const noKeySrv = await bootWith({ CLUB_KEY: '', DATABASE_URL: DB_URL }, p407);
+    b = await bannerFor(p407, signedInNoSync);
     ok(/no club key/i.test(b) && /CLUB_KEY/.test(b),
        'server missing CLUB_KEY: the app says so without anyone reading a log');
     noKeySrv.kill();
 
-    const noDbSrv = await bootWith({ CLUB_KEY: KEY, DATABASE_URL: '' }, 8408);
-    b = await bannerFor(8408, signedInNoSync);
+    const p408 = await freePort();
+    const noDbSrv = await bootWith({ CLUB_KEY: KEY, DATABASE_URL: '' }, p408);
+    b = await bannerFor(p408, signedInNoSync);
     ok(/can't reach its database|cannot reach its database/i.test(b),
        'server with no database: the app says that instead');
     noDbSrv.kill();
@@ -227,6 +253,10 @@ function waitFor(port, tries = 80) {
     await pg.click('#unlockBtn');
     await pg.waitForTimeout(1200);
 
+    // a brand-new club starts today, so give it some history to page back into
+    await pg.evaluate(() => Store.setStartDate(Store.shift(Store.today(), -30)));
+    await pg.waitForTimeout(300);
+
     const heroToday = await pg.textContent('.hero');
     ok(/Morning|Afternoon|Evening/.test(heroToday), 'today greets you by time of day');
 
@@ -258,20 +288,23 @@ function waitFor(port, tries = 80) {
 
     // ---- health tells the truth about each way this is misconfigured ----
 
-    const noDb = await bootWith({ CLUB_KEY: KEY, DATABASE_URL: '' }, 8403);
-    let h = await health(8403);
+    const p403 = await freePort();
+    const noDb = await bootWith({ CLUB_KEY: KEY, DATABASE_URL: '' }, p403);
+    let h = await health(p403);
     ok(h.configured === false && h.database === false, 'health reports a missing DATABASE_URL');
     ok(/No DATABASE_URL/.test(h.detail || ''), 'and says so in words');
     noDb.kill();
 
-    const badDb = await bootWith({ CLUB_KEY: KEY, DATABASE_URL: 'postgresql://p:p@127.0.0.1:59998/x' }, 8404);
-    h = await health(8404);
+    const p404 = await freePort();
+    const badDb = await bootWith({ CLUB_KEY: KEY, DATABASE_URL: 'postgresql://p:p@127.0.0.1:59998/x' }, p404);
+    h = await health(p404);
     ok(h.configured === true && h.database === false, 'health reports an unreachable database');
     ok(/Cannot reach the database/.test(h.detail || ''), 'and names the connection error');
     badDb.kill();
 
-    const noKey = await bootWith({ CLUB_KEY: '', DATABASE_URL: DB_URL }, 8405);
-    h = await health(8405);
+    const p405 = await freePort();
+    const noKey = await bootWith({ CLUB_KEY: '', DATABASE_URL: DB_URL }, p405);
+    h = await health(p405);
     ok(h.database === true && h.schema === true && h.locked === false,
        'health reports a healthy database with no CLUB_KEY');
     ok(h.records === undefined, 'the record count is withheld without the key');
@@ -286,13 +319,14 @@ function waitFor(port, tries = 80) {
     // spawned directly, and the wait is on the app itself — polling health first
     // would measure the health call rather than how soon the app is served
     const t0 = Date.now();
+    const p406 = await freePort();
     const blackhole = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
       env: Object.assign({}, process.env, {
-        PORT: '8406', CLUB_KEY: KEY, DATABASE_URL: 'postgresql://u:p@192.0.2.123:5432/db'
+        PORT: String(p406), CLUB_KEY: KEY, DATABASE_URL: 'postgresql://u:p@192.0.2.123:5432/db'
       }), stdio: 'ignore'
     });
     const page = await new Promise(resolve => {
-      const tick = () => http.get({ host: '127.0.0.1', port: 8406, path: '/index.html' },
+      const tick = () => http.get({ host: '127.0.0.1', port: p406, path: '/index.html' },
         res => { res.resume(); resolve({ code: res.statusCode, ms: Date.now() - t0 }); })
         .on('error', () => setTimeout(tick, 50));
       tick();
@@ -301,7 +335,7 @@ function waitFor(port, tries = 80) {
     ok(page.ms < 5000, `and without waiting on it (served in ${page.ms}ms)`);
 
     const hStart = Date.now();
-    h = await health(8406);
+    h = await health(p406);
     const hMs = Date.now() - hStart;
     ok(h.database === false && /Cannot reach/.test(h.detail || ''),
        'health still names the database problem');

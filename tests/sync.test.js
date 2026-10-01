@@ -103,7 +103,11 @@ async function device(browser, label, prefs) {
 
   // ---------- a bad key surfaces an error rather than failing silently ----------
   const C = await device(browser, 'C', { sync: { url: API, key: 'wrong-key', on: true } });
-  ok((await C.textContent('#syncStatus')).includes('error'), 'a bad key shows a sync error');
+  // the first pull retries a few times before giving up, so wait for the verdict
+  const errored = await C.waitForFunction(
+    () => (document.getElementById('syncStatus').textContent || '').includes('error'),
+    null, { timeout: 15000 }).then(() => true).catch(() => false);
+  ok(errored, 'a bad key shows a sync error');
 
   await browser.close();
   up.server.close();

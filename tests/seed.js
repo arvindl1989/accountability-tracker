@@ -25,5 +25,13 @@ module.exports = function seed() {
       }, t: Date.now() - i * 86400000 };
     }
   }
+  // The seeded club has been going for six weeks, so give it a start date that
+  // covers that history. Without one everything seeded here would be ignored.
+  const first = new Date(today); first.setDate(first.getDate() - 45);
+  recs['club'] = { v: {
+    units: 'kg',
+    start: `${first.getFullYear()}-${String(first.getMonth() + 1).padStart(2, '0')}-${String(first.getDate()).padStart(2, '0')}`
+  }, t: Date.now() - 46 * 86400000 };
+
   return { records: recs };
 };

@@ -229,6 +229,21 @@ genuinely unable to edit each other's days, that's Supabase magic-link auth with
 policies keyed on `auth.uid()` — a bigger job, and a clean one now that identity
 is a single well-defined thing in the code.
 
+## Where the club starts
+
+The tracker begins on a date you set, **1 October 2026** by default, under
+**Settings → Club start date**. Nothing before it counts: the date strip won't
+offer those days, the charts and the show-up grid begin there, the Board won't
+page back past the first week, and any record dated earlier is ignored rather
+than deleted.
+
+That last part matters more than it sounds. Consistency is "days logged out of
+the days the club has existed", not out of a fixed 30 — otherwise everyone would
+be staring at 3% on day one for no reason other than the calendar.
+
+Old test data stays in the database, simply unseen. Move the start date back if
+you ever want it again.
+
 ## How the points work
 
 Per person, per day:
@@ -325,7 +340,7 @@ both the light and dark surfaces, so nobody's line disappears.
 npm install && npm test   # drives the real page in a headless browser
 ```
 
-145 checks across six suites: the UI, sign-in / sign-out and personal links, the
+151 checks across six suites: the UI, sign-in / sign-out and personal links, the
 WhatsApp share text, a two-device sync test, the connection diagnostic against
 each way the shared board fails, and an end-to-end run of the real `server.js`
 against a real Postgres with two browsers talking to it.

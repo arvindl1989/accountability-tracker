@@ -51,6 +51,12 @@ var Store = (function () {
     for (var i = days - 1; i >= 0; i--) out.push(shift(end, -i));
     return out;
   }
+  // The club did not exist before its start date, so neither do those days:
+  // counting them would show everyone at 3% consistency in week one.
+  function sinceStart(days, endStr) {
+    var from = startDate();
+    return rangeBack(days, endStr).filter(function (d) { return d >= from; });
+  }
   // Monday-based week start.
   function weekStart(dateStr) {
     var d = parse(dateStr || today());
@@ -152,6 +158,7 @@ var Store = (function () {
   }
 
   function entry(pid, date) {
+    if (before(date)) return blank();          // older records are simply ignored
     var e = get(entryKey(pid, date), null);
     if (!e) return blank();
     return {
@@ -204,6 +211,19 @@ var Store = (function () {
     emit();
   }
 
+  var DEFAULT_START = '2026-10-01';
+  function startDate() {
+    var c = get('club', {}) || {};
+    return /^\d{4}-\d{2}-\d{2}$/.test(c.start || '') ? c.start : DEFAULT_START;
+  }
+  function setStartDate(d) {
+    var c = get('club', {}) || {};
+    c.start = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : DEFAULT_START;
+    set('club', c);
+    emit();
+  }
+  function before(d) { return d < startDate(); }
+
   function units() { return (get('club', {}) || {}).units || 'kg'; }
   function setUnits(u) { var c = get('club', {}) || {}; c.units = u === 'lb' ? 'lb' : 'kg'; set('club', c); emit(); }
 
@@ -231,7 +251,9 @@ var Store = (function () {
       if (!isLogged(entry(pid, cursor))) return 0;
     }
     var n = 0;
-    while (isLogged(entry(pid, cursor)) && n < 3650) { n++; cursor = shift(cursor, -1); }
+    while (!before(cursor) && isLogged(entry(pid, cursor)) && n < 3650) {
+      n++; cursor = shift(cursor, -1);
+    }
     return n;
   }
 
@@ -251,9 +273,10 @@ var Store = (function () {
     return total;
   }
   function consistency(pid, days) {
-    var span = rangeBack(days), n = 0;
+    var span = sinceStart(days), n = 0;
+    if (!span.length) return 0;
     span.forEach(function (d) { if (isLogged(entry(pid, d))) n++; });
-    return Math.round((n / days) * 100);
+    return Math.round((n / span.length) * 100);
   }
 
   // Most recent non-null value of a field, searching back `days` from today.
@@ -316,6 +339,7 @@ var Store = (function () {
     prefs: prefs, savePrefs: savePrefs, records: function () { return data.records; },
     onChange: onChange, emit: emit,
     iso: iso, today: today, shift: shift, parse: parse, rangeBack: rangeBack,
+    sinceStart: sinceStart, startDate: startDate, setStartDate: setStartDate, before: before,
     weekStart: weekStart, daysBetween: daysBetween,
     people: people, person: person, me: me,
     signIn: signIn, signOut: signOut, hasIdentity: hasIdentity,
